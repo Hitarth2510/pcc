@@ -20,6 +20,20 @@
     // Create the client and expose it globally
     window.supabaseClient = createClient(supabaseUrl, supabaseKey);
     console.log("Supabase client initialized on page load");
+    
+    // Also expose a function to list all tables in the database
+    window.listAllTables = async () => {
+      try {
+        // This RPC call requires a custom function to be set up in Supabase
+        // Try to get schema info using public schema
+        const { data, error } = await window.supabaseClient.rpc('get_tables');
+        if (error) throw error;
+        return data;
+      } catch (e) {
+        console.error("Error listing tables:", e);
+        return null;
+      }
+    };
   </script>
   <style>
     body {
@@ -224,12 +238,53 @@
     
     // Try multiple table names that might exist in the database
     async function tryMultipleTables(problemId) {
-      const possibleTables = ['problems', 'problem', 'challenges', 'challenge', 'coding_problems', 'questions'];
-      let foundData = false;
+      // Expanded list of possible table names with variations
+      const possibleTables = [
+        'problems', 'problem', 'challenges', 'challenge', 'coding_problems', 
+        'questions', 'tasks', 'assignments', 'exercises', 'puzzles', 
+        // Try common prefixes/conventions
+        'tbl_problems', 'tbl_challenges', 'problem_bank', 'challenge_bank',
+        // Try variations with capitalization 
+        'Problems', 'Problem', 'Challenges', 'Challenge',
+        // Try different schema
+        'public.problems', 'public.challenges', 'code.problems'
+      ];
       
+      let foundData = false;
+      const outputElement = document.getElementById('output');
+      outputElement.innerText = "Checking database tables...\n";
+      
+      // First try to get a list of all tables from the schema
+      try {
+        const { data: tablesData, error: tablesError } = await window.supabaseClient
+          .from('information_schema.tables')
+          .select('table_name')
+          .eq('table_schema', 'public');
+          
+        if (!tablesError && tablesData && tablesData.length > 0) {
+          outputElement.innerText += `Found ${tablesData.length} tables in database:\n`;
+          tablesData.forEach(t => {
+            outputElement.innerText += `- ${t.table_name}\n`;
+            // Add any discovered tables to our list if not already there
+            if (!possibleTables.includes(t.table_name)) {
+              possibleTables.push(t.table_name);
+            }
+          });
+        } else {
+          outputElement.innerText += "Could not retrieve table list from database schema.\n";
+        }
+      } catch (err) {
+        console.log("Error querying schema:", err);
+        outputElement.innerText += "Note: Could not query database schema.\n";
+      }
+      
+      // Now try all possible tables
       for (const table of possibleTables) {
         console.log(`Trying table: ${table}`);
+        outputElement.innerText += `Checking table: ${table}...\n`;
+        
         try {
+          // First check if this table exists by getting any rows
           const { data, error } = await window.supabaseClient
             .from(table)
             .select('*')
@@ -237,17 +292,51 @@
             
           if (!error && data && data.length > 0) {
             console.log(`Found data in table "${table}":`, data);
+            outputElement.innerText += `✓ Found ${data.length} rows in table "${table}"\n`;
             
-            // We found a table with data, now try to get the specific problem
-            const { data: problemData, error: problemError } = await window.supabaseClient
-              .from(table)
-              .select('*')
-              .eq('id', problemId)
-              .single();
-              
-            if (!problemError && problemData) {
-              console.log(`Found problem in "${table}":`, problemData);
-              populateProblemData(problemData);
+            // We found a table with data, now try different approaches to get a specific problem
+            
+            // 1. Try by ID first (most common primary key)
+            try {
+              const { data: idData, error: idError } = await window.supabaseClient
+                .from(table)
+                .select('*')
+                .eq('id', problemId)
+                .single();
+                
+              if (!idError && idData) {
+                console.log(`Found problem by id in "${table}":`, idData);
+                populateProblemData(idData);
+                foundData = true;
+                break;
+              }
+            } catch (idErr) {
+              console.log(`Error querying by ID in "${table}":`, idErr);
+            }
+            
+            // 2. Try by problem_id if id didn't work
+            try {
+              const { data: pidData, error: pidError } = await window.supabaseClient
+                .from(table)
+                .select('*')
+                .eq('problem_id', problemId)
+                .single();
+                
+              if (!pidError && pidData) {
+                console.log(`Found problem by problem_id in "${table}":`, pidData);
+                populateProblemData(pidData);
+                foundData = true;
+                break;
+              }
+            } catch (pidErr) {
+              console.log(`Error querying by problem_id in "${table}":`, pidErr);
+            }
+            
+            // 3. If still not found but we have data, just use the first record
+            if (!foundData && data && data.length > 0) {
+              console.log(`Using first record from "${table}" as fallback:`, data[0]);
+              outputElement.innerText += "Note: Using first available problem as fallback.\n";
+              populateProblemData(data[0]);
               foundData = true;
               break;
             }
@@ -258,7 +347,21 @@
       }
       
       if (!foundData) {
-        displayError('Data Access Error', 'Could not find the problem data in the database. Please verify the database structure and permissions.');
+        displayError('Data Access Error', 'Could not find any problem data in the database. Please verify the database structure and permissions.');
+        
+        // Offer to create sample data since nothing was found
+        const outputElement = document.getElementById('output');
+        outputElement.innerText = "No problem data found in any database table.\n\n";
+        outputElement.innerText += "Would you like to create sample problem data?\n";
+        
+        // Add buttons directly to output area
+        const createBtn = document.createElement('button');
+        createBtn.innerText = "Create Sample Data";
+        createBtn.onclick = createSampleData;
+        createBtn.style = "background-color: #33aaff; margin-top: 10px; margin-right: 10px;";
+        
+        outputElement.appendChild(document.createElement('br'));
+        outputElement.appendChild(createBtn);
       }
     }
     
@@ -294,12 +397,25 @@
     function populateProblemData(data) {
       console.log('Populating UI with data:', data);
       
-      // Match possible field names that might exist in the database
-      const title = data.title || data.name || data.problem_title || 'Untitled Problem';
-      const description = data.description || data.problem_description || data.statement || 'No description available.';
-      const inputFormat = data.input_format || data.input || data.input_description || 'No input format specified.';
-      const expectedOutput = data.expected_output || data.output || data.output_format || 'No expected output specified.';
-      const initialCode = data.initial_code || data.starter_code || data.template || data.code || '# Write your solution here\n';
+      // Match possible field names that might exist in the database - expanding the list
+      const title = data.title || data.name || data.problem_title || data.challenge_name || 
+                   data.problem_name || data.task_name || 'Untitled Problem';
+                   
+      const description = data.description || data.problem_description || data.statement || 
+                         data.problem_statement || data.challenge_description || data.details || 
+                         data.content || data.text || 'No description available.';
+                         
+      const inputFormat = data.input_format || data.input || data.input_description || 
+                         data.problem_input || data.sample_input || data.test_input || 
+                         'No input format specified.';
+                         
+      const expectedOutput = data.expected_output || data.output || data.output_format || 
+                            data.sample_output || data.problem_output || data.test_output || 
+                            'No expected output specified.';
+                            
+      const initialCode = data.initial_code || data.starter_code || data.template || 
+                         data.code || data.sample_code || data.boilerplate || 
+                         data.starter_template || '# Write your solution here\n';
       
       // Update the UI elements
       document.getElementById('problem-title').innerText = title;
@@ -405,26 +521,137 @@
         if (!window.supabaseClient) {
           outputElement.innerText += "❌ Error: Supabase client not available. Module might not be loaded.\n";
           return;
+        } else {
+          outputElement.innerText += "✓ Supabase client is available\n";
         }
         
-        // Test connection by checking available tables
-        outputElement.innerText += "Checking available tables...\n";
-        const allTables = ['problems', 'problem', 'challenges', 'challenge', 'coding_problems', 'questions'];
-        let tableFound = false;
+        // First try to get database info - check if we can query postgres meta tables
+        outputElement.innerText += "\nAttempting to list database tables...\n";
         
-        for (const table of allTables) {
-          try {
-            const { data, error } = await window.supabaseClient
-              .from(table)
-              .select('count')
-              .limit(1);
+        // Get all tables from information schema
+        try {
+          const { data: tablesData, error: tablesError } = await window.supabaseClient
+            .from('information_schema.tables')
+            .select('table_name, table_schema')
+            .eq('table_schema', 'public')
+            .order('table_name');
+            
+          if (!tablesError && tablesData && tablesData.length > 0) {
+            outputElement.innerText += `✓ Found ${tablesData.length} tables in public schema:\n`;
+            tablesData.forEach(t => {
+              outputElement.innerText += `- ${t.table_name}\n`;
+            });
+            
+            // Now check if any of these tables have problem-like data
+            outputElement.innerText += "\nChecking tables for coding problem data...\n";
+            let problemTableFound = false;
+            
+            for (const tableInfo of tablesData) {
+              try {
+                const { data: rowData, error: rowError } = await window.supabaseClient
+                  .from(tableInfo.table_name)
+                  .select('*')
+                  .limit(1);
+                  
+                if (!rowError && rowData && rowData.length > 0) {
+                  const columns = Object.keys(rowData[0]);
+                  
+                  // Check if this looks like a problem table by checking for common fields
+                  const problemFields = ['title', 'description', 'problem', 'challenge', 
+                                        'statement', 'code', 'solution'];
+                  
+                  const hasProblemFields = problemFields.some(field => 
+                    columns.some(col => col.toLowerCase().includes(field.toLowerCase())));
+                  
+                  if (hasProblemFields) {
+                    problemTableFound = true;
+                    outputElement.innerText += `✓ Table "${tableInfo.table_name}" appears to contain problem data\n`;
+                    outputElement.innerText += `  Columns: ${columns.join(', ')}\n`;
+                    outputElement.innerText += `  Sample data: ${JSON.stringify(rowData[0], null, 2)}\n\n`;
+                  }
+                }
+              } catch (err) {
+                console.error(`Error querying table ${tableInfo.table_name}:`, err);
+              }
+            }
+            
+            if (!problemTableFound) {
+              outputElement.innerText += "❌ No tables with problem data were found.\n\n";
+              // Add button to create sample data
+              outputElement.innerText += "Would you like to create sample problem data?\n";
               
-            if (!error) {
-              outputElement.innerText += `✓ Found table: "${table}"\n`;
-              tableFound = true;
+              // Add a selection for which table to use
+              const selectEl = document.createElement('select');
+              selectEl.id = 'table-select';
+              const defaultOption = document.createElement('option');
+              defaultOption.value = 'problems';
+              defaultOption.text = 'problems (create new)';
+              selectEl.appendChild(defaultOption);
               
-              // Check columns in this table
-              outputElement.innerText += `Checking columns in "${table}"...\n`;
+              tablesData.forEach(t => {
+                const option = document.createElement('option');
+                option.value = t.table_name;
+                option.text = t.table_name + ' (existing)';
+                selectEl.appendChild(option);
+              });
+              
+              // Add create button
+              const createBtn = document.createElement('button');
+              createBtn.innerText = "Create Sample Data";
+              createBtn.onclick = () => {
+                const selectedTable = document.getElementById('table-select').value;
+                createSampleDataInTable(selectedTable);
+              };
+              createBtn.style = "background-color: #33aaff; margin-top: 10px; margin-left: 10px;";
+              
+              outputElement.appendChild(document.createElement('br'));
+              outputElement.appendChild(selectEl);
+              outputElement.appendChild(createBtn);
+            }
+          } else {
+            outputElement.innerText += "❌ Could not retrieve table list from database schema.\n";
+            outputElement.innerText += "Error: " + (tablesError ? tablesError.message : "No data returned") + "\n";
+            
+            // Try alternative approach
+            outputElement.innerText += "\nTrying alternative approach to find tables...\n";
+            await checkCommonTables();
+          }
+        } catch (err) {
+          console.error("Error querying schema:", err);
+          outputElement.innerText += "❌ Error querying database schema: " + err.message + "\n";
+          
+          // Try alternative approach
+          outputElement.innerText += "\nTrying alternative approach to find tables...\n";
+          await checkCommonTables();
+        }
+      } catch (err) {
+        outputElement.innerText += `❌ Error during database test: ${err.message}\n`;
+      }
+    }
+    
+    // Check common table names directly
+    async function checkCommonTables() {
+      const outputElement = document.getElementById('output');
+      const possibleTables = [
+        'problems', 'problem', 'challenges', 'challenge', 'coding_problems', 
+        'questions', 'tasks', 'assignments', 'exercises'
+      ];
+      
+      let tableFound = false;
+      
+      for (const table of possibleTables) {
+        try {
+          const { data, error } = await window.supabaseClient
+            .from(table)
+            .select('count')
+            .limit(1);
+            
+          if (!error) {
+            outputElement.innerText += `✓ Found table: "${table}"\n`;
+            tableFound = true;
+            
+            // Check columns in this table
+            try {
               const { data: rowData, error: rowError } = await window.supabaseClient
                 .from(table)
                 .select('*')
@@ -432,33 +659,116 @@
                 
               if (!rowError && rowData && rowData.length > 0) {
                 const columns = Object.keys(rowData[0]);
-                outputElement.innerText += `✓ Columns found: ${columns.join(', ')}\n`;
+                outputElement.innerText += `  Columns: ${columns.join(', ')}\n`;
                 
                 // Show a sample of the data
-                outputElement.innerText += `\nSample data from "${table}":\n`;
-                outputElement.innerText += JSON.stringify(rowData[0], null, 2);
+                outputElement.innerText += `  Sample data: ${JSON.stringify(rowData[0], null, 2)}\n\n`;
               } else {
-                outputElement.innerText += `❌ Could not retrieve columns from "${table}": ${rowError?.message || 'No data'}\n`;
+                outputElement.innerText += `  Table exists but is empty or inaccessible.\n`;
               }
+            } catch (err) {
+              outputElement.innerText += `  Error retrieving data: ${err.message}\n`;
             }
-          } catch (err) {
-            outputElement.innerText += `❌ Error checking table "${table}": ${err.message}\n`;
           }
+        } catch (err) {
+          // Silently continue to next table
+        }
+      }
+      
+      if (!tableFound) {
+        outputElement.innerText += "❌ No valid tables found.\n\n";
+        outputElement.innerText += "Would you like to create a new 'problems' table with sample data?\n";
+        
+        const createBtn = document.createElement('button');
+        createBtn.innerText = "Create Sample Data";
+        createBtn.onclick = () => createSampleDataInTable('problems');
+        createBtn.style = "background-color: #33aaff; margin-top: 10px;";
+        
+        outputElement.appendChild(document.createElement('br'));
+        outputElement.appendChild(createBtn);
+      }
+    }
+    
+    // Create sample data in a specific table
+    async function createSampleDataInTable(tableName) {
+      const outputElement = document.getElementById('output');
+      outputElement.innerText = `Creating sample data in table '${tableName}'...\n`;
+      
+      // Sample problem data
+      const sampleProblems = [
+        {
+          title: "Sum of Two Numbers",
+          description: "Write a function that returns the sum of two numbers.",
+          input_format: "Two integers, a and b",
+          expected_output: "An integer representing the sum of a and b",
+          initial_code: "# Write a function to add two numbers\ndef add_numbers(a, b):\n    # Your code here\n    pass\n\n# Test your function\nprint(add_numbers(5, 3))"
+        },
+        {
+          title: "Find the Maximum",
+          description: "Write a function to find the maximum value in a list of numbers.",
+          input_format: "A list of integers",
+          expected_output: "The maximum integer in the list",
+          initial_code: "# Write a function to find the maximum value\ndef find_maximum(numbers):\n    # Your code here\n    pass\n\n# Test your function\nprint(find_maximum([4, 9, 2, 7, 5]))"
+        },
+        {
+          title: "Palindrome Check",
+          description: "Write a function to check if a string is a palindrome (reads the same forwards and backwards).",
+          input_format: "A string",
+          expected_output: "Boolean value (True or False)",
+          initial_code: "# Write a function to check if a string is a palindrome\ndef is_palindrome(text):\n    # Your code here\n    pass\n\n# Test your function\nprint(is_palindrome('racecar'))\nprint(is_palindrome('hello'))"
+        }
+      ];
+      
+      try {
+        // Insert the sample problems
+        const { data, error } = await window.supabaseClient
+          .from(tableName)
+          .insert(sampleProblems)
+          .select();
+          
+        if (error) {
+          outputElement.innerText += `❌ Error creating problems: ${error.message}\n`;
+          
+          if (error.code === '42P01') {
+            outputElement.innerText += "\nTable does not exist. Attempting to create it first...\n";
+            
+            // We can't directly create tables with Supabase client, but we'll show instructions
+            outputElement.innerText += "To create the table in Supabase, use the SQL editor in the Supabase dashboard with this query:\n\n";
+            outputElement.innerText += `
+CREATE TABLE ${tableName} (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  input_format TEXT,
+  expected_output TEXT,
+  initial_code TEXT
+);
+            `.trim() + "\n\n";
+            
+            outputElement.innerText += "After creating the table, click the 'Create Sample Data' button again.";
+          } else if (error.code === '42501') {
+            outputElement.innerText += "\nPermission denied. Make sure your Supabase user has INSERT permission.\n";
+            outputElement.innerText += "You may need to:\n";
+            outputElement.innerText += "1. Enable Row Level Security (RLS) and add appropriate policies\n";
+            outputElement.innerText += "2. Make sure your API key has sufficient permissions\n";
+          }
+          
+          return;
         }
         
-        if (!tableFound) {
-          outputElement.innerText += "❌ No valid tables found. Please check your database structure.\n";
-          outputElement.innerText += "Common issues:\n";
-          outputElement.innerText += "1. Tables don't exist in this database\n";
-          outputElement.innerText += "2. Anon key doesn't have SELECT permission\n";
-          outputElement.innerText += "3. RLS (Row Level Security) policies are blocking access\n";
-        }
+        outputElement.innerText += `✅ Successfully created ${data.length} sample problems in table '${tableName}'!\n`;
+        outputElement.innerText += "Refresh the page to see the problems.\n";
+        
+        // Show a sample of what was created
+        outputElement.innerText += "\nSample problem created:\n";
+        outputElement.innerText += JSON.stringify(data[0], null, 2);
+        
       } catch (err) {
-        outputElement.innerText += `❌ Error during database test: ${err.message}\n`;
+        outputElement.innerText += `❌ Error inserting data: ${err.message}\n`;
       }
     }
 
-    // Create sample problem data in the database
+    // Create sample problem data in the database (entry point function)
     async function createSampleData() {
       const outputElement = document.getElementById('output');
       outputElement.innerText = "Attempting to create sample problem data...\n";
@@ -492,7 +802,7 @@
               // Add a confirmation button
               const confirmBtn = document.createElement('button');
               confirmBtn.innerText = "Yes, Add More Problems";
-              confirmBtn.onclick = () => insertSampleProblems();
+              confirmBtn.onclick = () => createSampleDataInTable('problems');
               confirmBtn.style = "background-color: #33aaff; margin-top: 10px; margin-right: 10px;";
               
               const cancelBtn = document.createElement('button');
@@ -511,77 +821,10 @@
         }
         
         // If we reached here, either the table doesn't exist or we should create it
-        await insertSampleProblems();
+        await createSampleDataInTable('problems');
         
       } catch (err) {
         outputElement.innerText += `❌ Error creating sample data: ${err.message}\n`;
-      }
-    }
-    
-    // Insert sample problems into the database
-    async function insertSampleProblems() {
-      const outputElement = document.getElementById('output');
-      outputElement.innerText += "Creating sample problems...\n";
-      
-      // Sample problem data
-      const sampleProblems = [
-        {
-          title: "Sum of Two Numbers",
-          description: "Write a function that returns the sum of two numbers.",
-          input_format: "Two integers, a and b",
-          expected_output: "An integer representing the sum of a and b",
-          initial_code: "# Write a function to add two numbers\ndef add_numbers(a, b):\n    # Your code here\n    pass\n\n# Test your function\nprint(add_numbers(5, 3))"
-        },
-        {
-          title: "Find the Maximum",
-          description: "Write a function to find the maximum value in a list of numbers.",
-          input_format: "A list of integers",
-          expected_output: "The maximum integer in the list",
-          initial_code: "# Write a function to find the maximum value\ndef find_maximum(numbers):\n    # Your code here\n    pass\n\n# Test your function\nprint(find_maximum([4, 9, 2, 7, 5]))"
-        },
-        {
-          title: "Palindrome Check",
-          description: "Write a function to check if a string is a palindrome (reads the same forwards and backwards).",
-          input_format: "A string",
-          expected_output: "Boolean value (True or False)",
-          initial_code: "# Write a function to check if a string is a palindrome\ndef is_palindrome(text):\n    # Your code here\n    pass\n\n# Test your function\nprint(is_palindrome('racecar'))\nprint(is_palindrome('hello'))"
-        }
-      ];
-      
-      try {
-        // First create the table if it doesn't exist
-        // Note: Supabase doesn't support direct CREATE TABLE, so we'll just insert and let it handle errors
-        
-        // Insert the sample problems
-        const { data, error } = await window.supabaseClient
-          .from('problems')
-          .insert(sampleProblems)
-          .select();
-          
-        if (error) {
-          outputElement.innerText += `❌ Error creating problems: ${error.message}\n`;
-          
-          // If permission error, show helpful message
-          if (error.code === '42501') {
-            outputElement.innerText += "\nPermission denied. Make sure your Supabase user has INSERT permission.\n";
-            outputElement.innerText += "You may need to:\n";
-            outputElement.innerText += "1. Create the 'problems' table manually in Supabase Dashboard\n";
-            outputElement.innerText += "2. Enable Row Level Security (RLS) and add appropriate policies\n";
-            outputElement.innerText += "3. Make sure your API key has sufficient permissions\n";
-          }
-          
-          return;
-        }
-        
-        outputElement.innerText += `✅ Successfully created ${data.length} sample problems!\n`;
-        outputElement.innerText += "Refresh the page to see the problems.\n";
-        
-        // Show a sample of what was created
-        outputElement.innerText += "\nSample problem created:\n";
-        outputElement.innerText += JSON.stringify(data[0], null, 2);
-        
-      } catch (err) {
-        outputElement.innerText += `❌ Error inserting data: ${err.message}\n`;
       }
     }
   </script>
