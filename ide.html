@@ -19,18 +19,25 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     // Replace with your actual Supabase URL and key.
     const supabaseUrl = 'https://iqkjkoddrogneycvmgav.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxa2prb2Rkcm9nbmV5Y3ZtZ2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2MjUyNjgsImV4cCI6MjA1OTIwMTI2OH0.rv-rgncbWxgc5Z0VXHT-jtdRF59cjyK9h8sH-dRPQs8'; 
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxa2prb2Rkcm9nbmV5Y3ZtZ2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2MjUyNjgsImV4cCI6MjA1OTIwMTI2OH0.rv-rgncbWxgc5Z0VXHT-jtdRF59cjyK9h8sH-dRPQs8';
     window.supabaseClient = createClient(supabaseUrl, supabaseKey);
     console.log("Supabase client initialized on page load");
   </script>
 
+  <!-- Split.js for adjustable UI -->
+  <script src="https://cdn.jsdelivr.net/npm/split.js/dist/split.min.js"></script>
+
   <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
     body {
       background-color: black;
       color: #33ff33;
       font-family: 'Press Start 2P', cursive;
-      margin: 0;
-      padding: 1rem;
+      padding: 0;
     }
     .retro-header {
       text-align: center;
@@ -39,43 +46,40 @@
       border-bottom: 2px solid #33ff33;
       text-shadow: 0 0 5px #33ff33;
     }
-    .top-panel {
-      background: #111;
-      padding: 5px;
-      margin-top: 10px;
-      border: 2px solid #33ff33;
-      border-radius: 10px;
-      box-shadow: 0 0 10px #33ff33;
-    }
-    .container {
+    /* Outer container: split into leftPanel and rightPanel */
+    #outerSplit {
       display: flex;
-      justify-content: space-between;
-      padding: 20px;
+      height: calc(100% - 70px); /* header height ~70px */
     }
-    .left-panel {
-      width: 48%;
+    #leftPanel, #rightPanel {
+      overflow: auto;
+    }
+    #leftPanel {
+      background: #111;
+      padding: 10px;
+    }
+    /* Right panel is further split vertically */
+    #rightPanel {
       display: flex;
       flex-direction: column;
-      gap: 10px;
     }
+    #editorSection, #testcaseSection {
+      overflow: auto;
+      padding: 10px;
+    }
+    /* Styling for problem detail boxes */
     .problem-statement, .problem-input, .problem-output {
       background: #111;
       padding: 15px;
       border: 2px solid #33ff33;
       border-radius: 10px;
       box-shadow: 0 0 10px #33ff33;
+      margin-bottom: 10px;
     }
-    .editor-container {
-      width: 48%;
-      background: #111;
-      padding: 15px;
-      border: 2px solid #33ff33;
-      border-radius: 10px;
-      box-shadow: 0 0 10px #33ff33;
-    }
+    /* Monaco editor container */
     #code-editor {
       width: 100%;
-      height: 300px;
+      height: 100%;
       background: #1e1e1e;
       border: 2px solid #33ff33;
       box-shadow: inset 0 0 10px #33ff33;
@@ -102,7 +106,7 @@
       background: black;
       border: 2px solid #33ff33;
       padding: 10px;
-      margin-top: 20px;
+      margin-top: 10px;
       box-shadow: 0 0 10px #33ff33;
     }
     .output-container pre {
@@ -111,13 +115,13 @@
       border-radius: 5px;
       border: 1px solid #33ff33;
     }
-    /* Test cases container */
+    /* Testcases container styling */
     .testcases-container {
       background: #111;
       border: 2px solid #33ff33;
       border-radius: 10px;
       box-shadow: 0 0 10px #33ff33;
-      margin-top: 20px;
+      margin-top: 10px;
       padding: 10px;
     }
     .testcases-header {
@@ -158,12 +162,11 @@
     <h2>Round 1</h2>
   </header>
 
-  <div class="top-panel">
-    <h2 id="question-no">Question No: </h2>
-  </div>
-
-  <div class="container">
-    <div class="left-panel">
+  <!-- Outer Split: Left Panel for Problem Details, Right Panel for IDE & Testcases -->
+  <div id="outerSplit">
+    <!-- Left Panel: Problem Details -->
+    <div id="leftPanel">
+      <h2 id="question-no">Question No: </h2>
       <div class="problem-statement">
         <h2 id="problem-title">Loading...</h2>
         <p id="problem-description">Loading problem description...</p>
@@ -178,57 +181,79 @@
       </div>
     </div>
 
-    <div class="editor-container">
-      <h2>Code Editor</h2>
-      <div id="code-editor"></div>
-      <div class="buttons">
-        <button onclick="runCode()">Run</button>
-        <button onclick="clearOutput()">Clear Output</button>
-        <button onclick="zoomIn()">Zoom In (+)</button>
-        <button onclick="zoomOut()">Zoom Out (-)</button>
-        <button onclick="gotoNextQuestion()">Next Question</button>
-        <button onclick="gotoPreviousQuestion()">Previous Question</button>
-        <button onclick="submitSolution()" style="background-color: #00ffa5;">Submit</button>
+    <!-- Right Panel: Contains Editor (top) and Testcases (bottom) -->
+    <div id="rightPanel">
+      <!-- Editor Section (Top Right) -->
+      <div id="editorSection">
+        <h2>Code Editor</h2>
+        <div id="code-editor"></div>
+        <div class="buttons">
+          <button onclick="runCode()">Run</button>
+          <button onclick="clearOutput()">Clear Output</button>
+          <button onclick="zoomIn()">Zoom In (+)</button>
+          <button onclick="zoomOut()">Zoom Out (-)</button>
+          <button onclick="gotoNextQuestion()">Next Question</button>
+          <button onclick="gotoPreviousQuestion()">Previous Question</button>
+          <button onclick="submitSolution()" style="background-color: #00ffa5;">Submit</button>
+        </div>
+        <!-- Optional console output (can be integrated here or as separate container) -->
+        <div class="output-container">
+          <h2>Console Output</h2>
+          <pre id="output">No output yet...</pre>
+          <div class="buttons">
+            <button onclick="runDbTest()" style="background-color: #ff5555; margin-top: 10px;">Test DB</button>
+            <button onclick="createSampleData()" style="background-color: #33aaff; margin-top: 10px;">Create Sample Data</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Testcase Section (Bottom Right) -->
+      <div id="testcaseSection">
+        <div class="testcases-container">
+          <div class="testcases-header">Public Test Cases</div>
+          <div id="testcases" class="testcases">
+            <!-- Public test cases will be displayed dynamically -->
+          </div>
+          <div class="test-result-area">
+            <h2>Test Result</h2>
+            <div id="test-result-message">Run your code to see test results</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Test cases UI -->
-  <div class="testcases-container">
-    <div class="testcases-header">Public Test Cases</div>
-    <div id="testcases" class="testcases">
-      <!-- Public test cases will be displayed here dynamically -->
-    </div>
-    <div class="test-result-area">
-      <h2>Test Result</h2>
-      <div id="test-result-message">Run your code to see test results</div>
-    </div>
-  </div>
-
-  <div class="output-container">
-    <h2>Console Output</h2>
-    <pre id="output">No output yet...</pre>
-    <div class="buttons">
-      <button onclick="runDbTest()" style="background-color: #ff5555; margin-top: 10px;">Test Database Connection</button>
-      <button onclick="createSampleData()" style="background-color: #33aaff; margin-top: 10px;">Create Sample Data</button>
-    </div>
-  </div>
-
   <script>
-    // Replace with your actual user ID from your authentication system
-    const CURRENT_USER_ID = 123;
+    // ============ SPLIT.JS LAYOUT SETUP ============
+    window.addEventListener('DOMContentLoaded', function() {
+      // Split the page horizontally: leftPanel and rightPanel (50% each by default)
+      Split(['#leftPanel', '#rightPanel'], {
+        sizes: [50, 50],
+        minSize: [200, 300],
+        gutterSize: 6
+      });
 
-    // Global variable to hold current problem data (including test cases)
+      // Split the rightPanel vertically: editorSection (top) and testcaseSection (bottom)
+      Split(['#editorSection', '#testcaseSection'], {
+        direction: 'vertical',
+        sizes: [60, 40],
+        minSize: [200, 200],
+        gutterSize: 6
+      });
+    });
+
+    // ============ GLOBAL VARIABLES & USER ID ============
+    const CURRENT_USER_ID = 123; // Replace with real user ID from your auth system
     window.currentProblem = null;
 
-    // Initialize the application
+    // ============ INITIALIZATION ============
     async function initializeApp() {
       console.log("Initializing app...");
       initializeEditor();
       setTimeout(fetchProblemData, 500);
     }
 
-    // Fetch problem data from the 'pcc_problems' table
+    // ============ FETCH PROBLEM DATA ============
     async function fetchProblemData() {
       try {
         if (!window.supabaseClient) {
@@ -263,7 +288,7 @@
       }
     }
 
-    // Populate UI with problem data
+    // ============ POPULATE PROBLEM DATA ============
     function populateProblemData(data) {
       document.getElementById('problem-title').innerText = data.title || "Untitled Problem";
       document.getElementById('problem-description').innerText = data.description || "No description available.";
@@ -277,11 +302,10 @@
       }
     }
 
-    // Display public test cases in UI
+    // ============ DISPLAY PUBLIC TEST CASES ============
     function displayTestcases(data) {
       const testcasesDiv = document.getElementById('testcases');
-      testcasesDiv.innerHTML = ""; // Clear existing
-
+      testcasesDiv.innerHTML = "";
       if (!data.public_test_cases || data.public_test_cases.length === 0) {
         testcasesDiv.innerHTML = "<div>No Public Test Cases</div>";
         return;
@@ -289,33 +313,28 @@
       data.public_test_cases.forEach((tc, index) => {
         const card = document.createElement('div');
         card.className = "testcase-card";
-
         const titleDiv = document.createElement('div');
         titleDiv.className = "testcase-title";
         titleDiv.innerText = `Case ${index + 1}`;
         card.appendChild(titleDiv);
-
         const inputPre = document.createElement('pre');
         inputPre.innerText = tc.input;
         card.appendChild(inputPre);
-
         testcasesDiv.appendChild(card);
       });
     }
 
-    // Navigation functions for next/previous question
+    // ============ NAVIGATION ============
     async function gotoNextQuestion() {
       const urlParams = new URLSearchParams(window.location.search);
       const currentId = parseInt(urlParams.get('id')) || 1;
       const nextId = currentId + 1;
       const newUrl = window.location.pathname + "?id=" + nextId;
-
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', nextId)
         .single();
-
       if (error || !data) {
         displayError("Problem Not Found", `No problem found with ID: ${nextId}`);
         return;
@@ -335,13 +354,11 @@
       }
       const prevId = currentId - 1;
       const newUrl = window.location.pathname + "?id=" + prevId;
-
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', prevId)
         .single();
-
       if (error || !data) {
         displayError("Problem Not Found", `No problem found with ID: ${prevId}`);
         return;
@@ -352,17 +369,16 @@
       displayTestcases(data);
     }
 
-    // Simple error display function
+    // ============ ERROR HANDLING ============
     function displayError(title, message) {
       document.getElementById('problem-title').innerText = title;
       document.getElementById('problem-description').innerText = message;
       document.getElementById('problem-input').innerText = "Error loading input.";
       document.getElementById('problem-output').innerText = "Error loading output.";
-      document.getElementById('test-result-message').innerText = "Run your code to see test results.";
+      document.getElementById('test-result-message').innerText = "Run your code to see test results";
       document.getElementById('output').innerText = `${title}: ${message}`;
     }
 
-    // Database error handler
     function handleDatabaseError(error, problemId) {
       if (error.code === '42P01') {
         displayError("Table Not Found", "pcc_problems table does not exist in the database.");
@@ -371,13 +387,7 @@
       }
     }
 
-    // Clear output area
-    function clearOutput() {
-      document.getElementById('output').innerText = "No output yet...";
-      document.getElementById('test-result-message').innerText = "Run your code to see test results.";
-    }
-
-    // Standard code execution using Skulpt if no test cases exist
+    // ============ CODE EXECUTION (Skulpt) ============
     function runCodeNormally() {
       const code = window.editor.getValue();
       const outputEl = document.getElementById('output');
@@ -390,7 +400,6 @@
         .catch(err => outputEl.innerText = "Error: " + err.toString());
     }
 
-    // Main run function; check for test cases before running code
     function runCode() {
       if (!window.currentProblem) {
         displayError("No Problem Loaded", "Cannot run code without a loaded problem.");
@@ -398,7 +407,6 @@
       }
       const hasPublic = window.currentProblem.public_test_cases && window.currentProblem.public_test_cases.length > 0;
       const hasPrivate = window.currentProblem.private_test_cases && window.currentProblem.private_test_cases.length > 0;
-
       if (hasPublic || hasPrivate) {
         runTestCases();
       } else {
@@ -406,7 +414,6 @@
       }
     }
 
-    // Run public (and private) test cases
     function runTestCases() {
       const code = window.editor.getValue();
       document.getElementById('output').innerText = "";
@@ -427,7 +434,6 @@
       }
     }
 
-    // Run an array of test cases sequentially
     function runTestCasesForArray(code, testCases, isPublic, doneCallback) {
       const outputEl = document.getElementById('output');
       let index = 0;
@@ -453,7 +459,6 @@
       runNext();
     }
 
-    // Run a single test case using Skulpt with overridden input function
     function runSingleTestCase(code, testCase, callback) {
       let output = "";
       let inputIndex = 0;
@@ -480,7 +485,6 @@
         });
     }
 
-    // Helper to run a single test case asynchronously (for submit)
     function runSingleTestCaseAsync(code, testCase) {
       return new Promise((resolve) => {
         runSingleTestCase(code, testCase, (result) => {
@@ -490,7 +494,6 @@
       });
     }
 
-    // Submit solution: run private test cases, then store submission in DB
     async function submitSolution() {
       if (!window.currentProblem) {
         alert("No problem loaded. Cannot submit.");
@@ -519,12 +522,11 @@
       await storeSubmission(allPassed);
     }
 
-    // Store the submission in the 'submissions' table
     async function storeSubmission(allPassed) {
       try {
         const code = window.editor.getValue();
         const problemId = window.currentProblem.id;
-        const userId = CURRENT_USER_ID; // Replace with actual user ID from auth system
+        const userId = CURRENT_USER_ID;
         console.log("Storing submission for user:", userId, "Problem ID:", problemId);
         const { data, error } = await window.supabaseClient
           .from('submissions')
@@ -550,14 +552,12 @@
       }
     }
 
-    // Builtin read for Skulpt
     function builtinRead(x) {
       if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined)
         throw "File not found: '" + x + "'";
       return Sk.builtinFiles["files"][x];
     }
 
-    // Initialize Monaco Editor
     function initializeEditor() {
       require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor/min/vs' } });
       require(['vs/editor/editor.main'], function () {
@@ -598,7 +598,6 @@
       });
     }
 
-    // Font size controls
     let fontSize = 20;
     function zoomIn() {
       if (fontSize < 35) {
@@ -613,7 +612,6 @@
       }
     }
 
-    // DB test function
     async function runDbTest() {
       const outputEl = document.getElementById('output');
       outputEl.innerText = "Testing DB connection...\n";
@@ -632,11 +630,10 @@
       }
     }
 
-    // Dummy createSampleData (implement as needed)
     async function createSampleData() {
       const outputEl = document.getElementById('output');
       outputEl.innerText = "Creating sample data...\n";
-      // Implement your logic to insert sample data if needed.
+      // Implement your sample data creation logic as needed.
       outputEl.innerText += "Done (or error if any).";
     }
   </script>
