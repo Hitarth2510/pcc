@@ -24,16 +24,16 @@
     console.log("Supabase client initialized on page load");
   </script>
 
-  <!-- Split.js for draggable “sliding” UI -->
+  <!-- Split.js for adjustable, draggable splits -->
   <script src="https://cdn.jsdelivr.net/npm/split.js/dist/split.min.js"></script>
 
   <style>
-    /* Make body & html fill the entire screen to allow full split usage */
+    /* Reset and full-screen settings */
     html, body {
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden; /* So splits can fill the screen without scrolling */
+      overflow: hidden;
     }
     body {
       background-color: black;
@@ -41,55 +41,66 @@
       font-family: 'Press Start 2P', cursive;
     }
 
+    /* Header fixed at top */
     .retro-header {
       text-align: center;
       font-size: 2rem;
       padding: 10px;
       border-bottom: 2px solid #33ff33;
       text-shadow: 0 0 5px #33ff33;
-      /* We fix the header at top, so the splits are below it */
     }
 
-    /* Outer container: splitted horizontally into leftPanel and rightPanel */
+    /* Outer container: split horizontally */
     #outerSplit {
       display: flex;
+      height: calc(100% - 70px); /* subtract header height */
       width: 100%;
-      height: calc(100% - 70px); /* Subtract header height (~70px) */
     }
-    /* Each side can overflow if content is large */
-    #leftPanel, #rightPanel {
-      overflow: auto;
+    /* Left panel: problem details */
+    #leftPanel {
+      background: #111;
+      padding: 10px;
+      overflow-y: auto;
     }
-
-    /* Right panel is further splitted vertically into topRight and bottomRight */
+    /* Right panel: split vertically */
     #rightPanel {
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
-    #topRight, #bottomRight {
-      overflow: auto;
+    /* Top right: Code Editor + Buttons + Console */
+    #topRight {
+      background: #111;
       padding: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Bottom right: Test Cases */
+    #bottomRight {
+      background: #111;
+      padding: 10px;
+      overflow-y: auto;
     }
 
-    /* Problem detail sections */
+    /* Problem detail boxes */
     .problem-statement, .problem-input, .problem-output {
       background: #111;
       padding: 15px;
       border: 2px solid #33ff33;
       border-radius: 10px;
-      box-shadow: 0 0 10px #33ff33;
       margin-bottom: 10px;
+      box-shadow: 0 0 10px #33ff33;
     }
 
-    /* Editor container */
+    /* Code editor container */
     #code-editor {
       width: 100%;
-      height: 300px;
+      height: 100%;
       background: #1e1e1e;
       border: 2px solid #33ff33;
       box-shadow: inset 0 0 10px #33ff33;
     }
-
     .buttons {
       margin-top: 10px;
     }
@@ -109,7 +120,7 @@
       box-shadow: 0 0 10px #33ff33;
     }
 
-    /* Output container */
+    /* Console output styling */
     .output-container {
       background: black;
       border: 2px solid #33ff33;
@@ -124,14 +135,14 @@
       border: 1px solid #33ff33;
     }
 
-    /* Testcases container */
+    /* Testcases container styling */
     .testcases-container {
       background: #111;
       border: 2px solid #33ff33;
       border-radius: 10px;
+      padding: 10px;
       box-shadow: 0 0 10px #33ff33;
       margin-top: 10px;
-      padding: 10px;
     }
     .testcases-header {
       font-size: 1.2rem;
@@ -160,8 +171,8 @@
       background: #111;
       border: 2px solid #33ff33;
       border-radius: 10px;
-      box-shadow: 0 0 10px #33ff33;
       padding: 10px;
+      box-shadow: 0 0 10px #33ff33;
     }
   </style>
 </head>
@@ -171,9 +182,9 @@
     <h2>Round 1</h2>
   </header>
 
-  <!-- Outer split container for left (problem details) & right (IDE + testcases) -->
+  <!-- Outer horizontal split: Left (problem) & Right (editor+testcases) -->
   <div id="outerSplit">
-    <!-- Left Panel: Problem details -->
+    <!-- Left Panel: Problem Details -->
     <div id="leftPanel">
       <h2 id="question-no">Question No: </h2>
       <div class="problem-statement">
@@ -190,9 +201,9 @@
       </div>
     </div>
 
-    <!-- Right Panel: further split vertically into topRight (editor) and bottomRight (testcases) -->
+    <!-- Right Panel: Vertical split into Editor and Testcases -->
     <div id="rightPanel">
-      <!-- topRight: Code editor, run buttons, console output -->
+      <!-- Top Right: Code Editor, Buttons, Console Output -->
       <div id="topRight">
         <h2>Code Editor</h2>
         <div id="code-editor"></div>
@@ -215,12 +226,12 @@
         </div>
       </div>
 
-      <!-- bottomRight: Testcases container -->
+      <!-- Bottom Right: Testcases and Test Results -->
       <div id="bottomRight">
         <div class="testcases-container">
           <div class="testcases-header">Public Test Cases</div>
           <div id="testcases" class="testcases">
-            <!-- Dynamically show public testcases -->
+            <!-- Public test cases will be inserted here dynamically -->
           </div>
           <div class="test-result-area">
             <h2>Test Result</h2>
@@ -232,39 +243,35 @@
   </div>
 
   <script>
-    // Setup Split.js for adjustable “sliding” UI
+    // Setup Split.js for adjustable layout
     window.addEventListener('DOMContentLoaded', function() {
-      // First split horizontally: leftPanel (problem) and rightPanel (editor+testcases)
+      // Horizontal split: Left and Right panels
       Split(['#leftPanel', '#rightPanel'], {
-        sizes: [40, 60],     // initial ratio
-        minSize: [200, 300], // minimal widths
-        gutterSize: 6        // thickness of the draggable gutter
+        sizes: [40, 60], // 40% left, 60% right by default
+        minSize: [250, 300],
+        gutterSize: 6
       });
-
-      // Then split the rightPanel vertically: topRight (editor) and bottomRight (testcases)
+      // Vertical split in Right Panel: Top (Editor) and Bottom (Testcases)
       Split(['#topRight', '#bottomRight'], {
         direction: 'vertical',
-        sizes: [60, 40],    // initial ratio
-        minSize: [200, 200],
+        sizes: [60, 40], // 60% editor, 40% testcases by default
+        minSize: [250, 150],
         gutterSize: 6
       });
     });
 
-    // Replace with your actual user ID from your auth system
+    // Global variables and user ID (replace with real user id from auth)
     const CURRENT_USER_ID = 123;
     window.currentProblem = null;
 
-    // Initialize app
+    // Initialize the application
     async function initializeApp() {
       console.log("Initializing app...");
       initializeEditor();
       setTimeout(fetchProblemData, 500);
     }
 
-    // The rest of your code is the same final logic from your snippet
-    // Nothing important is removed.
-
-    // ============ FETCH PROBLEM DATA ============
+    // Fetch problem data from Supabase (from the 'pcc_problems' table)
     async function fetchProblemData() {
       try {
         if (!window.supabaseClient) {
@@ -299,19 +306,20 @@
       }
     }
 
+    // Populate problem details (left panel)
     function populateProblemData(data) {
       document.getElementById('problem-title').innerText = data.title || "Untitled Problem";
       document.getElementById('problem-description').innerText = data.description || "No description available.";
       document.getElementById('problem-input').innerText = data.input_format || "No input format specified.";
       document.getElementById('problem-output').innerText = data.expected_output || "No expected output specified.";
       document.getElementById('question-no').innerText = `Question No: ${data.id || 'N/A'}`;
-
       const initialCode = data.initial_code || "# Write your solution here\n";
       if (window.editor) {
         window.editor.setValue(initialCode);
       }
     }
 
+    // Display public test cases in the bottom right panel
     function displayTestcases(data) {
       const testcasesDiv = document.getElementById('testcases');
       testcasesDiv.innerHTML = "";
@@ -333,19 +341,17 @@
       });
     }
 
-    // ============ NAVIGATION ============
+    // Navigation: Next / Previous question
     async function gotoNextQuestion() {
       const urlParams = new URLSearchParams(window.location.search);
       const currentId = parseInt(urlParams.get('id')) || 1;
       const nextId = currentId + 1;
       const newUrl = window.location.pathname + "?id=" + nextId;
-
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', nextId)
         .single();
-
       if (error || !data) {
         displayError("Problem Not Found", `No problem found with ID: ${nextId}`);
         return;
@@ -365,13 +371,11 @@
       }
       const prevId = currentId - 1;
       const newUrl = window.location.pathname + "?id=" + prevId;
-
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', prevId)
         .single();
-
       if (error || !data) {
         displayError("Problem Not Found", `No problem found with ID: ${prevId}`);
         return;
@@ -646,7 +650,7 @@
     async function createSampleData() {
       const outputEl = document.getElementById('output');
       outputEl.innerText = "Creating sample data...\n";
-      // Implement your sample data creation logic as needed.
+      // Implement sample data creation logic as needed.
       outputEl.innerText += "Done (or error if any).";
     }
   </script>
