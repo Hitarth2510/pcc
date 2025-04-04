@@ -12,7 +12,14 @@
   <script type="module">
     // Import Supabase client builder for global access
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
-    window.supabaseCreateClient = createClient;
+    
+    // Initialize Supabase with our credentials
+    const supabaseUrl = 'https://iqkjkoddrogneycvmgav.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxa2prb2Rkcm9nbmV5Y3ZtZ2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2MjUyNjgsImV4cCI6MjA1OTIwMTI2OH0.rv-rgncbWxgc5Z0VXHT-jtdRF59cjyK9h8sH-dRPQs8';
+    
+    // Create the client and expose it globally
+    window.supabaseClient = createClient(supabaseUrl, supabaseKey);
+    console.log("Supabase client initialized on page load");
   </script>
   <style>
     body {
@@ -135,46 +142,43 @@
     </div>
   </div>
   <script>
-    // Supabase Configuration
-    const SUPABASE_URL = 'https://iqkjkoddrogneycvmgav.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxa2prb2Rkcm9nbmV5Y3ZtZ2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2MjUyNjgsImV4cCI6MjA1OTIwMTI2OH0.rv-rgncbWxgc5Z0VXHT-jtdRF59cjyK9h8sH-dRPQs8';
-    let supabaseClient;
+    // We don't need these anymore since we're creating the client in the module
+    // const SUPABASE_URL = 'https://iqkjkoddrogneycvmgav.supabase.co';
+    // const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxa2prb2Rkcm9nbmV5Y3ZtZ2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2MjUyNjgsImV4cCI6MjA1OTIwMTI2OH0.rv-rgncbWxgc5Z0VXHT-jtdRF59cjyK9h8sH-dRPQs8';
+    // let supabaseClient;
 
     // Initialize the application
     async function initializeApp() {
       console.log("Initializing app...");
+      
       // Initialize the editor first to provide a better user experience
       initializeEditor();
       
-      // Then try to load Supabase data with proper error handling
-      initSupabase();
+      // Give the module script time to initialize Supabase before we try to use it
+      setTimeout(fetchProblemData, 500);
     }
     
-    // Initialize Supabase client
-    async function initSupabase() {
-      try {
-        if (!window.supabaseCreateClient) {
-          console.error("Supabase client function not available");
-          displayError("Failed to load Supabase client", "Try refreshing the page. If the problem persists, please contact support.");
-          return;
-        }
-        
-        console.log("Creating Supabase client...");
-        supabaseClient = window.supabaseCreateClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log("Supabase client created successfully");
-        
-        // Give a bit more time for the client to fully initialize
-        setTimeout(fetchProblemData, 500);
-      } catch (err) {
-        console.error("Error initializing Supabase:", err);
-        displayError("Failed to initialize database connection", "Technical details: " + err.message);
-      }
-    }
+    // We don't need this function anymore since we're creating the client in the module
+    // async function initSupabase() {
+    //   try {
+    //     // ...
+    //   } catch (err) {
+    //     // ...
+    //   }
+    // }
     
     // Fetch problem data from Supabase
     async function fetchProblemData() {
       try {
         console.log("Fetching problem data...");
+        
+        // Check if supabaseClient is available from the module
+        if (!window.supabaseClient) {
+          console.error("Supabase client not available");
+          displayError("Connection Error", "Database client not initialized. Please refresh the page.");
+          return;
+        }
+        
         // Get problem ID from URL parameter or default to 1
         const urlParams = new URLSearchParams(window.location.search);
         const problemId = urlParams.get('id') || 1;
@@ -182,7 +186,7 @@
         console.log(`Fetching problem with ID: ${problemId}`);
         
         // Directly try the main problems table first
-        const { data, error } = await supabaseClient
+        const { data, error } = await window.supabaseClient
           .from('problems')
           .select('*')
           .eq('id', problemId)
@@ -226,7 +230,7 @@
       for (const table of possibleTables) {
         console.log(`Trying table: ${table}`);
         try {
-          const { data, error } = await supabaseClient
+          const { data, error } = await window.supabaseClient
             .from(table)
             .select('*')
             .limit(5);
@@ -235,7 +239,7 @@
             console.log(`Found data in table "${table}":`, data);
             
             // We found a table with data, now try to get the specific problem
-            const { data: problemData, error: problemError } = await supabaseClient
+            const { data: problemData, error: problemError } = await window.supabaseClient
               .from(table)
               .select('*')
               .eq('id', problemId)
@@ -398,17 +402,9 @@
       outputElement.innerText = "Testing database connection...\n";
       
       try {
-        if (!window.supabaseCreateClient) {
+        if (!window.supabaseClient) {
           outputElement.innerText += "❌ Error: Supabase client not available. Module might not be loaded.\n";
           return;
-        }
-        
-        if (!supabaseClient) {
-          // Create client if not already created
-          supabaseClient = window.supabaseCreateClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          outputElement.innerText += "✓ Created new Supabase client\n";
-        } else {
-          outputElement.innerText += "✓ Using existing Supabase client\n";
         }
         
         // Test connection by checking available tables
@@ -418,7 +414,7 @@
         
         for (const table of allTables) {
           try {
-            const { data, error } = await supabaseClient
+            const { data, error } = await window.supabaseClient
               .from(table)
               .select('count')
               .limit(1);
@@ -429,7 +425,7 @@
               
               // Check columns in this table
               outputElement.innerText += `Checking columns in "${table}"...\n`;
-              const { data: rowData, error: rowError } = await supabaseClient
+              const { data: rowData, error: rowError } = await window.supabaseClient
                 .from(table)
                 .select('*')
                 .limit(1);
@@ -468,14 +464,16 @@
       outputElement.innerText = "Attempting to create sample problem data...\n";
       
       try {
-        if (!supabaseClient) {
-          supabaseClient = window.supabaseCreateClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          outputElement.innerText += "Created new Supabase client\n";
+        if (!window.supabaseClient) {
+          outputElement.innerText += "❌ Error: Supabase client not available. Please refresh the page.\n";
+          return;
         }
+        
+        outputElement.innerText += "✓ Using existing Supabase client\n";
         
         // First check if problems table already exists with data
         try {
-          const { data, error } = await supabaseClient
+          const { data, error } = await window.supabaseClient
             .from('problems')
             .select('count')
             .limit(1);
@@ -484,7 +482,7 @@
             outputElement.innerText += "Table 'problems' already exists.\n";
             
             // Check if there's already data
-            const { count, error: countError } = await supabaseClient
+            const { count, error: countError } = await window.supabaseClient
               .from('problems')
               .select('*', { count: 'exact', head: true });
               
@@ -555,7 +553,7 @@
         // Note: Supabase doesn't support direct CREATE TABLE, so we'll just insert and let it handle errors
         
         // Insert the sample problems
-        const { data, error } = await supabaseClient
+        const { data, error } = await window.supabaseClient
           .from('problems')
           .insert(sampleProblems)
           .select();
