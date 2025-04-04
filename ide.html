@@ -55,6 +55,16 @@
       justify-content: space-between;
       padding: 20px;
     }
+  
+    .top-panel {
+      background: #111;
+      padding: 5px;
+      margin-top: 10px;
+      border: 2px solid #33ff33;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #33ff33;
+    }
+
     .left-panel {
       width: 48%;
       display: flex;
@@ -121,6 +131,9 @@
     <h1>Paradox '25</h1>
     <h2>Round 1</h2>
   </header>
+  <div class="top-panel">
+    <h2 id="question-no">Question. No: </h2>
+  </div>  
   <div class="container">
     <div class="left-panel">
       <div class="problem-statement">
@@ -144,6 +157,8 @@
         <button onclick="clearOutput()">Clear Output</button>
         <button onclick="zoomIn()">Zoom In (+)</button>
         <button onclick="zoomOut()">Zoom Out (-)</button>
+        <button onclick="gotoNextQuestion()">Next Question</button>
+        <button onclick="gotoPreviousQuestion()">Previous Question</button>
       </div>
     </div>
   </div>
@@ -372,6 +387,7 @@
       document.getElementById('problem-description').innerText = description;
       document.getElementById('problem-input').innerText = inputFormat;
       document.getElementById('problem-output').innerText = expectedOutput;
+      document.getElementById('question-no').innerText = `Question. No: ${data.id  || 'N/A'}`;
       
       if (window.editor) {
         window.editor.setValue(initialCode);
@@ -585,6 +601,79 @@ CREATE TABLE ${tableName} (
       } catch (err) {
         outputElement.innerText += `❌ Error creating sample data: ${err.message}\n`;
       }
+    }
+
+    async function gotoNextQuestion() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentId = parseInt(urlParams.get('id')) || 1;
+      const nextId = currentId + 1;
+      const newurl = window.location.pathname + '?id=' + nextId;
+ 
+      const { data, error } = await window.supabaseClient
+          .from('pcc_problems')
+          .select('*')
+          .eq('id', nextId)
+          .single();
+        console.log("Supabase response:", { data, error });
+      
+        if (error) {
+          console.error('Error fetching problem:', error);
+          if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('table')) {
+            console.log("Table 'pcc_problems' may not exist, trying alternative tables...");
+            await tryMultipleTables(nextId);
+            return;
+          }
+          handleDatabaseError(error, nextId);
+          return;
+        }
+      
+        if (!data) {
+          console.error('No data returned for problem ID:', nextId);
+          displayError('Problem Not Found', `Could not find problem with ID ${nextId}. Please check if this problem exists.`);
+          return;
+        }
+        window.history.pushState({ id: nextId }, '', newurl);
+        populateProblemData(data);
+    }
+
+    async function gotoPreviousQuestion() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentId = parseInt(urlParams.get('id')) || 1;
+  
+      if (currentId <= 1) {
+        displayError('No Previous Question', 'This is the first question. No previous questions available.');
+        return;
+      }
+
+      const nextId = currentId - 1;
+      const newurl = window.location.pathname + '?id=' + nextId;
+
+      const { data, error } = await window.supabaseClient
+          .from('pcc_problems')
+          .select('*')
+          .eq('id', nextId)
+          .single();
+        console.log("Supabase response:", { data, error });
+      
+        if (error) {
+          console.error('Error fetching problem:', error);
+          if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('table')) {
+            console.log("Table 'pcc_problems' may not exist, trying alternative tables...");
+            await tryMultipleTables(nextId);
+            return;
+          }
+          handleDatabaseError(error, nextId);
+          return;
+        }
+      
+        if (!data) {
+          console.error('No data returned for problem ID:', nextId);
+          displayError('Problem Not Found', `Could not find problem with ID ${nextId}. Please check if this problem exists.`);
+          return;
+        }
+
+        window.history.pushState({ id: nextId }, '', newurl);
+        populateProblemData(data);
     }
   </script>
 </body>
