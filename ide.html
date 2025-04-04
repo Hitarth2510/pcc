@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RetroCode Arena - LeetCode Style</title>
+  <title>RetroCode Arena</title>
 
   <!-- Monaco Editor -->
   <script src="https://unpkg.com/monaco-editor/min/vs/loader.js"></script>
@@ -14,14 +14,15 @@
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
 
-  <!-- Supabase (ESM Module) -->
+  <!-- Supabase JS Library (using ESM module) -->
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
+    // Replace with your actual Supabase credentials
     const supabaseUrl = 'https://iqkjkoddrogneycvmgav.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlxa2prb2Rkcm9nbmV5Y3ZtZ2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2MjUyNjgsImV4cCI6MjA1OTIwMTI2OH0.rv-rgncbWxgc5Z0VXHT-jtdRF59cjyK9h8sH-dRPQs8';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; 
     window.supabaseClient = createClient(supabaseUrl, supabaseKey);
-    console.log("Supabase client initialized");
+    console.log("Supabase client initialized on page load");
   </script>
 
   <style>
@@ -58,13 +59,12 @@
       flex-direction: column;
       gap: 10px;
     }
-    .problem-statement, .problem-input, .problem-output, .problem-constraints {
+    .problem-statement, .problem-input, .problem-output {
       background: #111;
       padding: 15px;
       border: 2px solid #33ff33;
       border-radius: 10px;
       box-shadow: 0 0 10px #33ff33;
-      margin-bottom: 10px;
     }
     .editor-container {
       width: 48%;
@@ -112,6 +112,46 @@
       border-radius: 5px;
       border: 1px solid #33ff33;
     }
+
+    /* NEW: testcases-container to mimic the UI from your screenshot */
+    .testcases-container {
+      background: #111;
+      border: 2px solid #33ff33;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #33ff33;
+      margin-top: 20px;
+      padding: 10px;
+    }
+    .testcases-header {
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+    }
+    .testcases {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .testcase-card {
+      background: #222;
+      border: 1px solid #33ff33;
+      border-radius: 6px;
+      padding: 8px;
+      min-width: 120px;
+      max-width: 200px;
+      flex: 1;
+    }
+    .testcase-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .test-result-area {
+      margin-top: 10px;
+      background: #111;
+      border: 2px solid #33ff33;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #33ff33;
+      padding: 10px;
+    }
   </style>
 </head>
 <body onload="initializeApp()">
@@ -119,8 +159,9 @@
     <h1>Paradox '25</h1>
     <h2>Round 1</h2>
   </header>
+
   <div class="top-panel">
-    <h2 id="question-no">Question No:</h2>
+    <h2 id="question-no">Question. No:</h2>
   </div>
 
   <div class="container">
@@ -129,20 +170,13 @@
         <h2 id="problem-title">Loading...</h2>
         <p id="problem-description">Loading problem description...</p>
       </div>
-
       <div class="problem-input">
         <h3>Input</h3>
         <p id="problem-input">Loading input details...</p>
       </div>
-
       <div class="problem-output">
         <h3>Expected Output</h3>
         <p id="problem-output">Loading expected output...</p>
-      </div>
-
-      <div class="problem-constraints">
-        <h3>Constraints</h3>
-        <p id="problem-constraints">Loading constraints...</p>
       </div>
     </div>
 
@@ -156,9 +190,21 @@
         <button onclick="zoomOut()">Zoom Out (-)</button>
         <button onclick="gotoNextQuestion()">Next Question</button>
         <button onclick="gotoPreviousQuestion()">Previous Question</button>
-        <!-- New Submit Button -->
+        <!-- Submit button to store code in DB -->
         <button onclick="submitSolution()" style="background-color: #00ffa5;">Submit</button>
       </div>
+    </div>
+  </div>
+
+  <!-- New UI for testcases and result, like your screenshot -->
+  <div class="testcases-container">
+    <div class="testcases-header">Testcase</div>
+    <div id="testcases" class="testcases">
+      <!-- We'll dynamically show each public test case input here -->
+    </div>
+    <div class="test-result-area">
+      <h2>Test Result</h2>
+      <div id="test-result-message">You must run your code first</div>
     </div>
   </div>
 
@@ -172,28 +218,29 @@
   </div>
 
   <script>
-    // Global variable to hold the current problem data
+    // Example user ID (Replace with real user auth system)
+    const CURRENT_USER_ID = 123;
+
+    // We'll store the current problem data (including testcases) globally
     window.currentProblem = null;
-    // Example user ID
-    const CURRENT_USER_ID = 123; // or fetch from your auth system
 
     // Initialize the page
     async function initializeApp() {
       console.log("Initializing app...");
       initializeEditor();
+      // Delay to ensure supabase is ready
       setTimeout(fetchProblemData, 500);
     }
 
-    // Fetch a single problem from the database
+    // Fetch a single problem from pcc_problems
     async function fetchProblemData() {
       if (!window.supabaseClient) {
-        displayError("Connection Error", "Supabase client not available. Refresh the page.");
+        displayError("Connection Error", "Supabase client not ready. Refresh page.");
         return;
       }
-
       const urlParams = new URLSearchParams(window.location.search);
       const problemId = urlParams.get('id') || 1;
-      console.log(`Fetching problem with ID: ${problemId}`);
+      console.log("Fetching problem with ID:", problemId);
 
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
@@ -207,22 +254,23 @@
         return;
       }
       if (!data) {
-        displayError("Problem Not Found", `No data found for ID: ${problemId}`);
+        displayError("Problem Not Found", `No data for problem ID: ${problemId}`);
         return;
       }
 
       window.currentProblem = data;
       populateProblemData(data);
+      // Also display testcases in UI
+      displayTestcases(data);
     }
 
-    // Populate UI with problem data
+    // Populate the problem statement UI
     function populateProblemData(data) {
       document.getElementById('problem-title').innerText = data.title || "Untitled Problem";
       document.getElementById('problem-description').innerText = data.description || "No description.";
       document.getElementById('problem-input').innerText = data.input_format || "No input format specified.";
       document.getElementById('problem-output').innerText = data.expected_output || "No expected output.";
-      document.getElementById('problem-constraints').innerText = data.constraints || "No constraints provided.";
-      document.getElementById('question-no').innerText = `Question No: ${data.id || 'N/A'}`;
+      document.getElementById('question-no').innerText = `Question. No: ${data.id || 'N/A'}`;
 
       const initialCode = data.initial_code || "# Write your solution here\n";
       if (window.editor) {
@@ -230,79 +278,167 @@
       }
     }
 
+    // Display the public testcases in the UI (like your screenshot)
+    function displayTestcases(data) {
+      const testcasesDiv = document.getElementById('testcases');
+      testcasesDiv.innerHTML = ""; // Clear old
+
+      // If no public testcases, just show "No testcases"
+      if (!data.public_test_cases || data.public_test_cases.length === 0) {
+        testcasesDiv.innerHTML = "<div>No Public Test Cases</div>";
+        return;
+      }
+
+      data.public_test_cases.forEach((tc, index) => {
+        const card = document.createElement('div');
+        card.className = "testcase-card";
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className = "testcase-title";
+        titleDiv.innerText = `Case ${index + 1}`;
+        card.appendChild(titleDiv);
+
+        // Show input in a code-like block
+        const inputPre = document.createElement('pre');
+        inputPre.innerText = tc.input;
+        card.appendChild(inputPre);
+
+        testcasesDiv.appendChild(card);
+      });
+    }
+
+    // Navigation for next question
+    async function gotoNextQuestion() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentId = parseInt(urlParams.get('id')) || 1;
+      const nextId = currentId + 1;
+      const newUrl = window.location.pathname + "?id=" + nextId;
+
+      const { data, error } = await window.supabaseClient
+        .from('pcc_problems')
+        .select('*')
+        .eq('id', nextId)
+        .single();
+
+      if (error || !data) {
+        displayError("Problem Not Found", `No problem found with ID: ${nextId}`);
+        return;
+      }
+      window.history.pushState({ id: nextId }, '', newUrl);
+      window.currentProblem = data;
+      populateProblemData(data);
+      displayTestcases(data);
+    }
+
+    // Navigation for previous question
+    async function gotoPreviousQuestion() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentId = parseInt(urlParams.get('id')) || 1;
+      if (currentId <= 1) {
+        displayError("No Previous Question", "This is the first question.");
+        return;
+      }
+      const prevId = currentId - 1;
+      const newUrl = window.location.pathname + "?id=" + prevId;
+
+      const { data, error } = await window.supabaseClient
+        .from('pcc_problems')
+        .select('*')
+        .eq('id', prevId)
+        .single();
+
+      if (error || !data) {
+        displayError("Problem Not Found", `No problem found with ID: ${prevId}`);
+        return;
+      }
+      window.history.pushState({ id: prevId }, '', newUrl);
+      window.currentProblem = data;
+      populateProblemData(data);
+      displayTestcases(data);
+    }
+
     // Simple error display
     function displayError(title, message) {
       document.getElementById('problem-title').innerText = title;
       document.getElementById('problem-description').innerText = message;
-      document.getElementById('problem-input').innerText = 'Error loading input.';
-      document.getElementById('problem-output').innerText = 'Error loading output.';
-      document.getElementById('problem-constraints').innerText = 'Error loading constraints.';
+      document.getElementById('problem-input').innerText = "Error loading input.";
+      document.getElementById('problem-output').innerText = "Error loading output.";
       document.getElementById('output').innerText = `${title}: ${message}`;
+      document.getElementById('testcases').innerHTML = "";
+      document.getElementById('test-result-message').innerText = "You must run your code first";
     }
 
-    // Database error handler
+    // DB error
     function handleDatabaseError(error, problemId) {
       if (error.code === '42P01') {
-        displayError('Table Not Found', 'pcc_problems table not found in database.');
+        displayError("Table Not Found", "pcc_problems table does not exist.");
       } else {
-        displayError('Database Error', `Error: ${error.message || error}`);
+        displayError("Database Error", `Error: ${error.message || error}`);
       }
     }
 
-    // Standard code execution with Skulpt (no test cases)
+    // Clear the console output
+    function clearOutput() {
+      document.getElementById('output').innerText = "No output yet...";
+      document.getElementById('test-result-message').innerText = "You must run your code first";
+    }
+
+    // Standard Skulpt code run if no testcases
     function runCodeNormally() {
       const code = window.editor.getValue();
       const outputElement = document.getElementById('output');
       outputElement.innerText = "Running code...";
-      let result = "";
-      function outf(text) { result += text + "\n"; }
+      let skulptOutput = "";
+      function outf(text) { skulptOutput += text + "\n"; }
 
       Sk.configure({ output: outf, read: builtinRead });
       Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true))
-        .then(() => outputElement.innerText = result)
+        .then(() => outputElement.innerText = skulptOutput)
         .catch(err => outputElement.innerText = "Error: " + err.toString());
     }
 
-    // Main run function that checks for test cases
+    // Main run function
     function runCode() {
       if (!window.currentProblem) {
         displayError("No Problem Loaded", "Cannot run code without a loaded problem.");
         return;
       }
-      // If test cases exist, run them. Otherwise run code normally
-      if ((window.currentProblem.public_test_cases && window.currentProblem.public_test_cases.length > 0) ||
-          (window.currentProblem.private_test_cases && window.currentProblem.private_test_cases.length > 0)) {
+      const hasPublic = window.currentProblem.public_test_cases && window.currentProblem.public_test_cases.length > 0;
+      const hasPrivate = window.currentProblem.private_test_cases && window.currentProblem.private_test_cases.length > 0;
+
+      if (hasPublic || hasPrivate) {
         runTestCases();
       } else {
         runCodeNormally();
       }
     }
 
-    // Execute public and private test cases
+    // Run testcases
     function runTestCases() {
-      const outputElement = document.getElementById('output');
-      outputElement.innerText = "";
       const code = window.editor.getValue();
+      document.getElementById('output').innerText = "";
+      document.getElementById('test-result-message').innerText = "";
 
-      // Public test cases
+      // Public testcases
       if (window.currentProblem.public_test_cases && window.currentProblem.public_test_cases.length > 0) {
-        outputElement.innerText += "Running Public Test Cases:\n";
-        runTestCasesForArray(code, window.currentProblem.public_test_cases, true, function() {
-          // Then run private test cases in the background
+        let msg = "Running Public Test Cases...\n";
+        document.getElementById('output').innerText = msg;
+        runTestCasesForArray(code, window.currentProblem.public_test_cases, true, () => {
+          // Then run private testcases in background
           if (window.currentProblem.private_test_cases && window.currentProblem.private_test_cases.length > 0) {
             console.log("Running Private Test Cases...");
-            runTestCasesForArray(code, window.currentProblem.private_test_cases, false, function() {
-              console.log("Finished private test cases (run).");
+            runTestCasesForArray(code, window.currentProblem.private_test_cases, false, () => {
+              console.log("Finished private testcases (run).");
             });
           }
         });
       } else {
-        outputElement.innerText += "No public test cases found. Running code normally.\n";
+        document.getElementById('output').innerText = "No public testcases. Running code normally.\n";
         runCodeNormally();
       }
     }
 
-    // Run test cases for a given array
+    // Helper: run an array of testcases
     function runTestCasesForArray(code, testCases, isPublic, doneCallback) {
       const outputElement = document.getElementById('output');
       let index = 0;
@@ -315,34 +451,33 @@
               outputElement.innerText += `Test Case ${index+1}: ${status}\n`;
               outputElement.innerText += `Expected: ${testCases[index].expected_output}\n`;
               outputElement.innerText += `Got: ${result.output}\n\n`;
+              document.getElementById('test-result-message').innerText += `Case ${index+1}: ${status}\n`;
             } else {
-              // Private test results are hidden from user, but logged
-              console.log(`Private Test Case ${index+1}:`, result);
+              // private
+              console.log("Private test result:", result);
             }
             index++;
             runNext();
           });
         } else {
-          doneCallback(); // All test cases done
+          doneCallback();
         }
       }
       runNext();
     }
 
-    // Run a single test case using Skulpt with overridden input
+    // Run single test with overridden input
     function runSingleTestCase(code, testCase, callback) {
       let output = "";
       let inputIndex = 0;
-      const inputLines = testCase.input.split("\n");
+      const lines = testCase.input.split("\n");
 
       function outf(text) { output += text; }
 
       Sk.configure({
         output: outf,
         read: builtinRead,
-        inputfun: function() {
-          return inputIndex < inputLines.length ? inputLines[inputIndex++] : "";
-        },
+        inputfun: () => (inputIndex < lines.length ? lines[inputIndex++] : ""),
         inputfunTakesPrompt: true
       });
 
@@ -361,42 +496,39 @@
         });
     }
 
-    // Submit solution: runs private tests, then if all pass => store code in DB
+    // Submit solution => run private testcases, store code in DB
     async function submitSolution() {
       if (!window.currentProblem) {
-        displayError("No Problem Loaded", "Cannot submit solution without a loaded problem.");
+        alert("No problem loaded. Cannot submit.");
         return;
       }
-      // If no private test cases, just store code
-      if (!window.currentProblem.private_test_cases || window.currentProblem.private_test_cases.length === 0) {
-        alert("No private test cases. Submitting code directly...");
-        await storeSubmission(true); // no private tests => pass
-        return;
-      }
-
       const code = window.editor.getValue();
-      const privateCases = window.currentProblem.private_test_cases;
-      let allPassed = true;
+      // If no private testcases, store code as allPassed = true
+      if (!window.currentProblem.private_test_cases || window.currentProblem.private_test_cases.length === 0) {
+        alert("No private testcases found. Submitting directly...");
+        await storeSubmission(true);
+        return;
+      }
 
-      // We run them in sequence
-      for (let i = 0; i < privateCases.length; i++) {
-        let result = await runSingleTestCaseAsync(code, privateCases[i]);
+      // Otherwise, run them in sequence
+      let allPassed = true;
+      for (let i = 0; i < window.currentProblem.private_test_cases.length; i++) {
+        const testCase = window.currentProblem.private_test_cases[i];
+        const result = await runSingleTestCaseAsync(code, testCase);
         if (!result.passed) {
           allPassed = false;
           break;
         }
       }
-
       if (allPassed) {
-        alert("All private test cases PASSED! Submitting solution...");
+        alert("All private testcases PASSED! Submitting solution...");
       } else {
-        alert("Some private test case FAILED. Storing code anyway, but not accepted for final scoring.");
+        alert("Some private testcases FAILED. Code is stored but not fully accepted.");
       }
-
       await storeSubmission(allPassed);
     }
 
-    // Helper to run a single test case asynchronously
+    // Helper to run single testcase async
     function runSingleTestCaseAsync(code, testCase) {
       return new Promise((resolve) => {
         runSingleTestCase(code, testCase, (result) => {
@@ -406,16 +538,19 @@
       });
     }
 
-    // Store the code in 'submissions' table
+    // Actually store code in DB (table 'submissions')
     async function storeSubmission(allPassed) {
       try {
-        const problemId = window.currentProblem.id;
         const code = window.editor.getValue();
+        const problemId = window.currentProblem.id;
+        // Replace with real user ID from your auth system
+        const userId = CURRENT_USER_ID; 
+
         const { data, error } = await window.supabaseClient
           .from('submissions')
           .insert([
             {
-              user_id: CURRENT_USER_ID, // Replace with real user ID from your auth
+              user_id: userId,
               problem_id: problemId,
               code: code,
               passed_private_tests: allPassed
@@ -424,28 +559,28 @@
           .select();
 
         if (error) {
-          console.error("Error storing submission:", error);
-          alert("Error storing submission in DB.");
+          console.error("Error storing submission in DB:", error);
+          alert("Error storing submission in DB. Check console for details.");
           return;
         }
-
-        alert(`Submission saved. Passed Private Tests: ${allPassed ? "Yes" : "No"}`);
+        alert(`Submission saved! Private tests passed: ${allPassed ? "YES" : "NO"}`);
       } catch (err) {
         console.error("Exception storing submission:", err);
-        alert("Exception while storing submission in DB. Check console.");
+        alert("Exception storing submission. Check console.");
       }
     }
 
-    // Clear output
-    function clearOutput() {
-      document.getElementById('output').innerText = "No output yet...";
+    function builtinRead(x) {
+      if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined) {
+        throw "File not found: '" + x + "'";
+      }
+      return Sk.builtinFiles["files"][x];
     }
 
-    // Builtin read function for Skulpt
-    function builtinRead(x) {
-      if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined)
-        throw "File not found: '" + x + "'";
-      return Sk.builtinFiles["files"][x];
+    // Clear console
+    function clearOutput() {
+      document.getElementById('output').innerText = "No output yet...";
+      document.getElementById('test-result-message').innerText = "You must run your code first";
     }
 
     // Initialize Monaco Editor
@@ -476,7 +611,6 @@
             'editor.lineNumbers.foreground': '#888888'
           }
         });
-
         window.editor = monaco.editor.create(document.getElementById('code-editor'), {
           value: "# Loading code...",
           language: 'python',
@@ -490,7 +624,7 @@
       });
     }
 
-    // Font size control
+    // Font size
     let fontSize = 20;
     function zoomIn() {
       if (fontSize < 35) {
@@ -505,76 +639,32 @@
       }
     }
 
-    // Navigation for next/previous question
-    async function gotoNextQuestion() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const currentId = parseInt(urlParams.get('id')) || 1;
-      const nextId = currentId + 1;
-      const newurl = window.location.pathname + '?id=' + nextId;
-
-      const { data, error } = await window.supabaseClient
-        .from('pcc_problems')
-        .select('*')
-        .eq('id', nextId)
-        .single();
-      if (error || !data) {
-        displayError('Problem Not Found', `No problem found with ID: ${nextId}`);
-        return;
-      }
-      window.history.pushState({ id: nextId }, '', newurl);
-      window.currentProblem = data;
-      populateProblemData(data);
-    }
-
-    async function gotoPreviousQuestion() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const currentId = parseInt(urlParams.get('id')) || 1;
-      if (currentId <= 1) {
-        displayError('No Previous Question', 'This is the first question.');
-        return;
-      }
-      const prevId = currentId - 1;
-      const newurl = window.location.pathname + '?id=' + prevId;
-
-      const { data, error } = await window.supabaseClient
-        .from('pcc_problems')
-        .select('*')
-        .eq('id', prevId)
-        .single();
-      if (error || !data) {
-        displayError('Problem Not Found', `No problem found with ID: ${prevId}`);
-        return;
-      }
-      window.history.pushState({ id: prevId }, '', newurl);
-      window.currentProblem = data;
-      populateProblemData(data);
-    }
-
-    // Utility: test DB connection
+    // DB test
     async function runDbTest() {
-      const outputElement = document.getElementById('output');
-      outputElement.innerText = "Testing DB connection...\n";
+      const outputEl = document.getElementById('output');
+      outputEl.innerText = "Testing DB connection...\n";
       try {
         const { data, error } = await window.supabaseClient
           .from('pcc_problems')
           .select('*')
           .limit(1);
+
         if (error) {
-          outputElement.innerText += "Error: " + error.message;
+          outputEl.innerText += "Error: " + error.message;
         } else {
-          outputElement.innerText += "✓ DB test successful. Found some data.\n";
+          outputEl.innerText += "DB test successful. Possibly found some data.\n";
         }
       } catch (err) {
-        outputElement.innerText += "Exception: " + err.message;
+        outputEl.innerText += "Exception: " + err.message;
       }
     }
 
-    // Utility: create sample data
+    // Create sample data
     async function createSampleData() {
-      const outputElement = document.getElementById('output');
-      outputElement.innerText = "Creating sample data...\n";
-      // Add your own logic or refer to earlier examples
-      outputElement.innerText += "Done or error if any.\n";
+      const outputEl = document.getElementById('output');
+      outputEl.innerText = "Creating sample data...\n";
+      // You can replicate from earlier code or keep it empty if you have your data
+      outputEl.innerText += "Done (or error if any).";
     }
   </script>
 </body>
