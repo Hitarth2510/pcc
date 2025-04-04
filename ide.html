@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RetroCode Arena</title>
+  <script src="https://unpkg.com/monaco-editor/min/vs/loader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      background-color: black;
+      color: #33ff33;
+      font-family: 'Press Start 2P', cursive;
+      margin: 0;
+      padding: 1rem;
+    }
+    .retro-header {
+      text-align: center;
+      font-size: 2rem;
+      padding: 10px;
+      border-bottom: 2px solid #33ff33;
+      text-shadow: 0 0 5px #33ff33;
+    }
+    .container {
+      display: flex;
+      justify-content: space-between;
+      padding: 20px;
+    }
+    .left-panel {
+      width: 48%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .problem-statement, .problem-input, .problem-output {
+      background: #111;
+      padding: 15px;
+      border: 2px solid #33ff33;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #33ff33;
+    }
+    .editor-container {
+      width: 48%;
+      background: #111;
+      padding: 15px;
+      border: 2px solid #33ff33;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #33ff33;
+    }
+    #code-editor {
+      width: 100%;
+      height: 300px;
+      background: #1e1e1e;
+      border: 2px solid #33ff33;
+      box-shadow: inset 0 0 10px #33ff33;
+    }
+    .buttons {
+      margin-top: 10px;
+    }
+    button {
+      background: #33ff33;
+      color: black;
+      font-weight: bold;
+      border: 2px solid #111;
+      padding: 10px;
+      cursor: pointer;
+      margin-right: 10px;
+      transition: all 0.2s ease-in-out;
+    }
+    button:hover {
+      background: black;
+      color: #33ff33;
+      box-shadow: 0 0 10px #33ff33;
+    }
+    .output-container {
+      background: black;
+      border: 2px solid #33ff33;
+      padding: 10px;
+      margin-top: 20px;
+      box-shadow: 0 0 10px #33ff33;
+    }
+    .output-container pre {
+      background: #111;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #33ff33;
+    }
+  </style>
+</head>
+<body onload="loadProblem()">
+  <header class="retro-header">
+    <h1>Paradox '25</h1>
+    <h2>Round 1</h2>
+  </header>
+  <div class="container">
+    <div class="left-panel">
+      <div class="problem-statement">
+        <h2 id="problem-title">Problem Title</h2>
+        <p id="problem-description">Problem description will appear here.</p>
+      </div>
+      <div class="problem-input">
+        <h3>Input</h3>
+        <p id="problem-input">User Input</p>
+      </div>
+      <div class="problem-output">
+        <h3>Expected Output</h3>
+        <p id="problem-output">Expected Output</p>
+      </div>
+    </div>
+    <div class="editor-container">
+      <h2>Code Editor</h2>
+      <div id="code-editor"></div>
+      <div class="buttons">
+        <button onclick="runCode()">Run</button>
+        <button onclick="clearOutput()">Clear Output</button>
+        <button onclick="zoomIn()">Zoom In (+)</button>
+        <button onclick="zoomOut()">Zoom Out (-)</button>
+
+      </div>
+    </div>
+  </div>
+  <div class="output-container">
+    <h2>Console Output</h2>
+    <pre id="output">No output yet...</pre>
+  </div>
+  <script>
+    function loadProblem() {
+      const savedProblem = localStorage.getItem('newProblem');
+      if (savedProblem) {
+        const problem = JSON.parse(savedProblem);
+        document.getElementById('problem-title').innerText = problem.title;
+        document.getElementById('problem-description').innerText = problem.description;
+        document.getElementById('problem-input').innerText = "User Input";
+        document.getElementById('problem-output').innerText = problem.expectedOutput;
+        window.editor.setValue(problem.initialCode);
+      }
+    }
+    function builtinRead(x) {
+      if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined)
+        throw "File not found: '" + x + "'";
+      return Sk.builtinFiles["files"][x];
+    }
+    function runCode() {
+      let code = window.editor.getValue();
+      let outputElement = document.getElementById('output');
+      outputElement.innerText = "Running...";
+      let output = "";
+      function outf(text) { output += text + "\n"; }
+      Sk.configure({ output: outf, read: builtinRead });
+      Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true))
+        .then(() => outputElement.innerText = output)
+        .catch(err => outputElement.innerText = "Error: " + err.toString());
+    }
+    function clearOutput() {
+      document.getElementById('output').innerText = "No output yet...";
+    }
+    require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor/min/vs' } });
+require(['vs/editor/editor.main'], function () {
+  monaco.editor.defineTheme('retroTheme', {
+    base: 'vs-dark', // Keep the dark theme as the base
+    inherit: true,
+    rules: [
+      { token: '', foreground: '33ff33', background: '000000' }, // Default: Green text on black
+      { token: 'keyword', foreground: 'ffcc00', fontStyle: 'bold' }, // Yellow for keywords
+      { token: 'comment', foreground: '8888ff', fontStyle: 'italic' }, // Blue for comments
+      { token: 'string', foreground: 'ff5555' }, // Red for strings
+      { token: 'number', foreground: 'ff66ff' }, // Pink for numbers
+      { token: 'function', foreground: '66ffff' }, // Cyan for function names
+      { token: 'operator', foreground: 'ff8800' }, // Orange for operators (+, -, *, etc.)
+      { token: 'variable', foreground: '33ff33' }, // Green for variables
+      { token: 'type', foreground: 'ff00ff', fontStyle: 'bold' }, // Magenta for types (int, str, etc.)
+    ],
+    colors: {
+      'editor.foreground': '#33ff33', // Default text green
+      'editor.background': '#000000', // Black background
+      'editorCursor.foreground': '#ffffff', // White cursor
+      'editor.lineHighlightBackground': '#222222', // Dark grey highlight for active line
+      'editor.selectionBackground': '#444400', // Yellow-green selection
+      'editor.selectionHighlightBackground': '#666600', // Slightly darker selection
+      'editor.lineNumbers.foreground': '#888888' // Grey line numbers
+    }
+  });
+
+  window.editor = monaco.editor.create(document.getElementById('code-editor'), {
+    value: "# Write your Python code here\nprint(\"Hello, World!\")",
+    language: 'python',
+    theme: 'retroTheme', // Apply the custom theme
+    automaticLayout: true,
+    fontSize: 20,
+    fontFamily: "'Press Start 2P', monospace", // Keep the retro font
+    minimap: { enabled: false }, // Disable minimap for a clean look
+    wordWrap: 'on' // Enable line wrapping
+  });
+});
+let fontSize = 16; // Default font size
+
+function zoomIn() {
+  if (fontSize < 35) { // Max limit
+    fontSize += 2;
+    window.editor.updateOptions({ fontSize: fontSize });
+  }
+}
+
+function zoomOut() {
+  if (fontSize > 10) { // Min limit
+    fontSize -= 2;
+    window.editor.updateOptions({ fontSize: fontSize });
+  }
+}
+
+  </script>
+</body>
+</html>
