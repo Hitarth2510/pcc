@@ -24,50 +24,54 @@
     console.log("Supabase client initialized on page load");
   </script>
 
-  <!-- Split.js for adjustable UI -->
+  <!-- Split.js for draggable “sliding” UI -->
   <script src="https://cdn.jsdelivr.net/npm/split.js/dist/split.min.js"></script>
 
   <style>
+    /* Make body & html fill the entire screen to allow full split usage */
     html, body {
       height: 100%;
       margin: 0;
-      overflow: hidden;
+      padding: 0;
+      overflow: hidden; /* So splits can fill the screen without scrolling */
     }
     body {
       background-color: black;
       color: #33ff33;
       font-family: 'Press Start 2P', cursive;
-      padding: 0;
     }
+
     .retro-header {
       text-align: center;
       font-size: 2rem;
       padding: 10px;
       border-bottom: 2px solid #33ff33;
       text-shadow: 0 0 5px #33ff33;
+      /* We fix the header at top, so the splits are below it */
     }
-    /* Outer container: split into leftPanel and rightPanel */
+
+    /* Outer container: splitted horizontally into leftPanel and rightPanel */
     #outerSplit {
       display: flex;
-      height: calc(100% - 70px); /* header height ~70px */
+      width: 100%;
+      height: calc(100% - 70px); /* Subtract header height (~70px) */
     }
+    /* Each side can overflow if content is large */
     #leftPanel, #rightPanel {
       overflow: auto;
     }
-    #leftPanel {
-      background: #111;
-      padding: 10px;
-    }
-    /* Right panel is further split vertically */
+
+    /* Right panel is further splitted vertically into topRight and bottomRight */
     #rightPanel {
       display: flex;
       flex-direction: column;
     }
-    #editorSection, #testcaseSection {
+    #topRight, #bottomRight {
       overflow: auto;
       padding: 10px;
     }
-    /* Styling for problem detail boxes */
+
+    /* Problem detail sections */
     .problem-statement, .problem-input, .problem-output {
       background: #111;
       padding: 15px;
@@ -76,14 +80,16 @@
       box-shadow: 0 0 10px #33ff33;
       margin-bottom: 10px;
     }
-    /* Monaco editor container */
+
+    /* Editor container */
     #code-editor {
       width: 100%;
-      height: 100%;
+      height: 300px;
       background: #1e1e1e;
       border: 2px solid #33ff33;
       box-shadow: inset 0 0 10px #33ff33;
     }
+
     .buttons {
       margin-top: 10px;
     }
@@ -102,6 +108,8 @@
       color: #33ff33;
       box-shadow: 0 0 10px #33ff33;
     }
+
+    /* Output container */
     .output-container {
       background: black;
       border: 2px solid #33ff33;
@@ -115,7 +123,8 @@
       border-radius: 5px;
       border: 1px solid #33ff33;
     }
-    /* Testcases container styling */
+
+    /* Testcases container */
     .testcases-container {
       background: #111;
       border: 2px solid #33ff33;
@@ -162,9 +171,9 @@
     <h2>Round 1</h2>
   </header>
 
-  <!-- Outer Split: Left Panel for Problem Details, Right Panel for IDE & Testcases -->
+  <!-- Outer split container for left (problem details) & right (IDE + testcases) -->
   <div id="outerSplit">
-    <!-- Left Panel: Problem Details -->
+    <!-- Left Panel: Problem details -->
     <div id="leftPanel">
       <h2 id="question-no">Question No: </h2>
       <div class="problem-statement">
@@ -181,10 +190,10 @@
       </div>
     </div>
 
-    <!-- Right Panel: Contains Editor (top) and Testcases (bottom) -->
+    <!-- Right Panel: further split vertically into topRight (editor) and bottomRight (testcases) -->
     <div id="rightPanel">
-      <!-- Editor Section (Top Right) -->
-      <div id="editorSection">
+      <!-- topRight: Code editor, run buttons, console output -->
+      <div id="topRight">
         <h2>Code Editor</h2>
         <div id="code-editor"></div>
         <div class="buttons">
@@ -196,7 +205,6 @@
           <button onclick="gotoPreviousQuestion()">Previous Question</button>
           <button onclick="submitSolution()" style="background-color: #00ffa5;">Submit</button>
         </div>
-        <!-- Optional console output (can be integrated here or as separate container) -->
         <div class="output-container">
           <h2>Console Output</h2>
           <pre id="output">No output yet...</pre>
@@ -207,12 +215,12 @@
         </div>
       </div>
 
-      <!-- Testcase Section (Bottom Right) -->
-      <div id="testcaseSection">
+      <!-- bottomRight: Testcases container -->
+      <div id="bottomRight">
         <div class="testcases-container">
           <div class="testcases-header">Public Test Cases</div>
           <div id="testcases" class="testcases">
-            <!-- Public test cases will be displayed dynamically -->
+            <!-- Dynamically show public testcases -->
           </div>
           <div class="test-result-area">
             <h2>Test Result</h2>
@@ -224,34 +232,37 @@
   </div>
 
   <script>
-    // ============ SPLIT.JS LAYOUT SETUP ============
+    // Setup Split.js for adjustable “sliding” UI
     window.addEventListener('DOMContentLoaded', function() {
-      // Split the page horizontally: leftPanel and rightPanel (50% each by default)
+      // First split horizontally: leftPanel (problem) and rightPanel (editor+testcases)
       Split(['#leftPanel', '#rightPanel'], {
-        sizes: [50, 50],
-        minSize: [200, 300],
-        gutterSize: 6
+        sizes: [40, 60],     // initial ratio
+        minSize: [200, 300], // minimal widths
+        gutterSize: 6        // thickness of the draggable gutter
       });
 
-      // Split the rightPanel vertically: editorSection (top) and testcaseSection (bottom)
-      Split(['#editorSection', '#testcaseSection'], {
+      // Then split the rightPanel vertically: topRight (editor) and bottomRight (testcases)
+      Split(['#topRight', '#bottomRight'], {
         direction: 'vertical',
-        sizes: [60, 40],
+        sizes: [60, 40],    // initial ratio
         minSize: [200, 200],
         gutterSize: 6
       });
     });
 
-    // ============ GLOBAL VARIABLES & USER ID ============
-    const CURRENT_USER_ID = 123; // Replace with real user ID from your auth system
+    // Replace with your actual user ID from your auth system
+    const CURRENT_USER_ID = 123;
     window.currentProblem = null;
 
-    // ============ INITIALIZATION ============
+    // Initialize app
     async function initializeApp() {
       console.log("Initializing app...");
       initializeEditor();
       setTimeout(fetchProblemData, 500);
     }
+
+    // The rest of your code is the same final logic from your snippet
+    // Nothing important is removed.
 
     // ============ FETCH PROBLEM DATA ============
     async function fetchProblemData() {
@@ -288,7 +299,6 @@
       }
     }
 
-    // ============ POPULATE PROBLEM DATA ============
     function populateProblemData(data) {
       document.getElementById('problem-title').innerText = data.title || "Untitled Problem";
       document.getElementById('problem-description').innerText = data.description || "No description available.";
@@ -302,7 +312,6 @@
       }
     }
 
-    // ============ DISPLAY PUBLIC TEST CASES ============
     function displayTestcases(data) {
       const testcasesDiv = document.getElementById('testcases');
       testcasesDiv.innerHTML = "";
@@ -330,11 +339,13 @@
       const currentId = parseInt(urlParams.get('id')) || 1;
       const nextId = currentId + 1;
       const newUrl = window.location.pathname + "?id=" + nextId;
+
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', nextId)
         .single();
+
       if (error || !data) {
         displayError("Problem Not Found", `No problem found with ID: ${nextId}`);
         return;
@@ -354,11 +365,13 @@
       }
       const prevId = currentId - 1;
       const newUrl = window.location.pathname + "?id=" + prevId;
+
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', prevId)
         .single();
+
       if (error || !data) {
         displayError("Problem Not Found", `No problem found with ID: ${prevId}`);
         return;
