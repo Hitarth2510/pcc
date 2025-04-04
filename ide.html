@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RetroCode Arena</title>
 
   <!-- Monaco Editor -->
@@ -12,9 +12,9 @@
   <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
 
   <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
 
-  <!-- Supabase JS Library (ESM module) -->
+  <!-- Supabase JS Library (using ESM module) -->
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     // Replace with your actual Supabase URL and key.
@@ -24,42 +24,53 @@
     console.log("Supabase client initialized on page load");
   </script>
 
-  <!-- Split.js for draggable “sliding” UI -->
+  <!-- Split.js for draggable splits -->
   <script src="https://cdn.jsdelivr.net/npm/split.js/dist/split.min.js"></script>
 
   <style>
-    /* Reset / full screen */
+    /* Ensure the HTML and body fill the viewport */
     html, body {
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden; /* So splits can fill the screen without scrolling */
+      overflow: hidden;
     }
     body {
       background-color: black;
       color: #33ff33;
       font-family: 'Press Start 2P', cursive;
     }
-
-    /* Header at top */
+    /* Fixed header */
     .retro-header {
+      flex: 0 0 70px;
       text-align: center;
       font-size: 2rem;
       padding: 10px;
       border-bottom: 2px solid #33ff33;
       text-shadow: 0 0 5px #33ff33;
     }
-
-    /* Outer container: splitted horizontally (left: problem, right: editor+tests) */
+    /* Main container below header */
+    #mainContainer {
+      display: flex;
+      flex-direction: column;
+      height: calc(100% - 70px);
+      width: 100%;
+    }
+    /* Outer horizontal split: left (problem details) and right (editor + test cases) */
     #outerSplit {
       display: flex;
+      flex: 1;
       width: 100%;
-      height: calc(100% - 70px); /* subtract header height */
     }
     #leftPanel, #rightPanel {
       overflow: auto;
     }
-    /* Right panel is further splitted vertically (top: editor, bottom: testcases) */
+    /* Left Panel for problem details */
+    #leftPanel {
+      background: #111;
+      padding: 10px;
+    }
+    /* Right Panel: vertical split into topRight and bottomRight */
     #rightPanel {
       display: flex;
       flex-direction: column;
@@ -68,8 +79,7 @@
       overflow: auto;
       padding: 10px;
     }
-
-    /* Problem detail sections */
+    /* Problem detail boxes */
     .problem-statement, .problem-input, .problem-output {
       background: #111;
       padding: 15px;
@@ -78,7 +88,6 @@
       margin-bottom: 10px;
       box-shadow: 0 0 10px #33ff33;
     }
-
     /* Code editor container */
     #code-editor {
       width: 100%;
@@ -105,7 +114,6 @@
       color: #33ff33;
       box-shadow: 0 0 10px #33ff33;
     }
-
     /* Console output styling */
     .output-container {
       background: black;
@@ -120,8 +128,7 @@
       border-radius: 5px;
       border: 1px solid #33ff33;
     }
-
-    /* Testcases container styling */
+    /* Testcases container */
     .testcases-container {
       background: #111;
       border: 2px solid #33ff33;
@@ -157,89 +164,91 @@
       background: #111;
       border: 2px solid #33ff33;
       border-radius: 10px;
-      box-shadow: 0 0 10px #33ff33;
       padding: 10px;
+      box-shadow: 0 0 10px #33ff33;
     }
   </style>
 </head>
-<body onload="initializeApp()">
-  <!-- Header -->
+<body>
   <header class="retro-header">
     <h1>Paradox '25</h1>
     <h2>Round 1</h2>
   </header>
 
-  <!-- Outer Split: Left (problem details) & Right (editor+testcases) -->
-  <div id="outerSplit">
-    <!-- Left Panel -->
-    <div id="leftPanel">
-      <h2 id="question-no">Question No: </h2>
-      <div class="problem-statement">
-        <h2 id="problem-title">Loading...</h2>
-        <p id="problem-description">Loading problem description...</p>
-      </div>
-      <div class="problem-input">
-        <h3>Input</h3>
-        <p id="problem-input">Loading input details...</p>
-      </div>
-      <div class="problem-output">
-        <h3>Expected Output</h3>
-        <p id="problem-output">Loading expected output...</p>
-      </div>
-    </div>
-
-    <!-- Right Panel: split vertically into topRight (editor) & bottomRight (testcases) -->
-    <div id="rightPanel">
-      <!-- topRight: Editor, Buttons, Console Output -->
-      <div id="topRight">
-        <h2>Code Editor</h2>
-        <div id="code-editor"></div>
-        <div class="buttons">
-          <button onclick="runCode()">Run</button>
-          <button onclick="clearOutput()">Clear Output</button>
-          <button onclick="zoomIn()">Zoom In (+)</button>
-          <button onclick="zoomOut()">Zoom Out (-)</button>
-          <button onclick="gotoNextQuestion()">Next Question</button>
-          <button onclick="gotoPreviousQuestion()">Previous Question</button>
-          <button onclick="submitSolution()" style="background-color: #00ffa5;">Submit</button>
+  <!-- Main container fills remaining height -->
+  <div id="mainContainer">
+    <!-- Outer horizontal split: Left Panel (problem details) and Right Panel (editor & test cases) -->
+    <div id="outerSplit">
+      <!-- Left Panel -->
+      <div id="leftPanel">
+        <h2 id="question-no">Question No: </h2>
+        <div class="problem-statement">
+          <h2 id="problem-title">Loading...</h2>
+          <p id="problem-description">Loading problem description...</p>
         </div>
-        <div class="output-container">
-          <h2>Console Output</h2>
-          <pre id="output">No output yet...</pre>
+        <div class="problem-input">
+          <h3>Input</h3>
+          <p id="problem-input">Loading input details...</p>
+        </div>
+        <div class="problem-output">
+          <h3>Expected Output</h3>
+          <p id="problem-output">Loading expected output...</p>
+        </div>
+      </div>
+
+      <!-- Right Panel: vertical split -->
+      <div id="rightPanel">
+        <!-- Top Right: Code Editor, Buttons, Console Output -->
+        <div id="topRight">
+          <h2>Code Editor</h2>
+          <div id="code-editor"></div>
           <div class="buttons">
-            <button onclick="runDbTest()" style="background-color: #ff5555; margin-top: 10px;">Test DB</button>
-            <button onclick="createSampleData()" style="background-color: #33aaff; margin-top: 10px;">Create Sample Data</button>
+            <button onclick="runCode()">Run</button>
+            <button onclick="clearOutput()">Clear Output</button>
+            <button onclick="zoomIn()">Zoom In (+)</button>
+            <button onclick="zoomOut()">Zoom Out (-)</button>
+            <button onclick="gotoNextQuestion()">Next Question</button>
+            <button onclick="gotoPreviousQuestion()">Previous Question</button>
+            <button onclick="submitSolution()" style="background-color: #00ffa5;">Submit</button>
+          </div>
+          <div class="output-container">
+            <h2>Console Output</h2>
+            <pre id="output">No output yet...</pre>
+            <div class="buttons">
+              <button onclick="runDbTest()" style="background-color: #ff5555; margin-top: 10px;">Test DB</button>
+              <button onclick="createSampleData()" style="background-color: #33aaff; margin-top: 10px;">Create Sample Data</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- bottomRight: Testcases and Test Results -->
-      <div id="bottomRight">
-        <div class="testcases-container">
-          <div class="testcases-header">Public Test Cases</div>
-          <div id="testcases" class="testcases">
-            <!-- Public testcases inserted dynamically -->
-          </div>
-          <div class="test-result-area">
-            <h2>Test Result</h2>
-            <div id="test-result-message">Run your code to see test results</div>
+        <!-- Bottom Right: Test Cases and Test Results -->
+        <div id="bottomRight">
+          <div class="testcases-container">
+            <div class="testcases-header">Public Test Cases</div>
+            <div id="testcases" class="testcases">
+              <!-- Test cases will be injected here -->
+            </div>
+            <div class="test-result-area">
+              <h2>Test Result</h2>
+              <div id="test-result-message">Run your code to see test results</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- JavaScript -->
   <script>
-    // ========== SPLIT.JS for adjustable layout ==========
+    // Initialize Split.js after DOM is loaded
     window.addEventListener('DOMContentLoaded', function() {
-      // 1) Horizontal split for leftPanel (problem) & rightPanel (editor+testcases)
+      // Horizontal split: leftPanel (problem details) and rightPanel (editor & test cases)
       Split(['#leftPanel', '#rightPanel'], {
-        sizes: [35, 65],  // 35% for left, 65% for right
+        sizes: [35, 65], // 35% for left, 65% for right
         minSize: [250, 300],
         gutterSize: 6
       });
-
-      // 2) Vertical split in the right panel: topRight (editor) & bottomRight (testcases)
+      // Vertical split: topRight (editor) and bottomRight (test cases)
       Split(['#topRight', '#bottomRight'], {
         direction: 'vertical',
         sizes: [60, 40], // 60% top, 40% bottom
@@ -248,22 +257,23 @@
       });
     });
 
-    // ========== GLOBALS ==========
-    const CURRENT_USER_ID = 123; // Replace with real user ID
+    // Global variables and user ID
+    const CURRENT_USER_ID = 123; // Replace with your actual user ID
     window.currentProblem = null;
 
-    // ========== INIT APP ==========
+    // Initialize the app
     async function initializeApp() {
       console.log("Initializing app...");
       initializeEditor();
+      // Delay to ensure Supabase and other scripts are loaded
       setTimeout(fetchProblemData, 500);
     }
 
-    // ========== FETCH PROBLEM DATA ==========
+    // Fetch problem data from Supabase (assumes table 'pcc_problems' exists)
     async function fetchProblemData() {
       try {
         if (!window.supabaseClient) {
-          displayError("Connection Error", "Supabase client not initialized. Please refresh.");
+          displayError("Connection Error", "Supabase client not initialized. Please refresh the page.");
           return;
         }
         const urlParams = new URLSearchParams(window.location.search);
@@ -282,7 +292,7 @@
           return;
         }
         if (!data) {
-          displayError("Problem Not Found", `No data for problem ID: ${problemId}`);
+          displayError("Problem Not Found", `No data found for problem ID: ${problemId}`);
           return;
         }
         window.currentProblem = data;
@@ -290,25 +300,24 @@
         displayTestcases(data);
       } catch (err) {
         console.error("Error in fetchProblemData:", err);
-        displayError("Database Connection Error", "Could not connect to DB. Check your connection.");
+        displayError("Database Connection Error", "Could not connect to the database. Check your connection.");
       }
     }
 
-    // ========== POPULATE PROBLEM DETAILS ==========
+    // Populate problem details in leftPanel
     function populateProblemData(data) {
       document.getElementById('problem-title').innerText = data.title || "Untitled Problem";
       document.getElementById('problem-description').innerText = data.description || "No description available.";
       document.getElementById('problem-input').innerText = data.input_format || "No input format specified.";
       document.getElementById('problem-output').innerText = data.expected_output || "No expected output specified.";
       document.getElementById('question-no').innerText = `Question No: ${data.id || 'N/A'}`;
-
       const initialCode = data.initial_code || "# Write your solution here\n";
       if (window.editor) {
         window.editor.setValue(initialCode);
       }
     }
 
-    // ========== DISPLAY PUBLIC TEST CASES ==========
+    // Display public test cases in the testcases container
     function displayTestcases(data) {
       const testcasesDiv = document.getElementById('testcases');
       testcasesDiv.innerHTML = "";
@@ -330,21 +339,19 @@
       });
     }
 
-    // ========== NAVIGATION ==========
+    // Navigation functions
     async function gotoNextQuestion() {
       const urlParams = new URLSearchParams(window.location.search);
       const currentId = parseInt(urlParams.get('id')) || 1;
       const nextId = currentId + 1;
       const newUrl = window.location.pathname + "?id=" + nextId;
-
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', nextId)
         .single();
-
       if (error || !data) {
-        displayError("Problem Not Found", `No problem with ID: ${nextId}`);
+        displayError("Problem Not Found", `No problem found with ID: ${nextId}`);
         return;
       }
       window.history.pushState({ id: nextId }, '', newUrl);
@@ -362,15 +369,13 @@
       }
       const prevId = currentId - 1;
       const newUrl = window.location.pathname + "?id=" + prevId;
-
       const { data, error } = await window.supabaseClient
         .from('pcc_problems')
         .select('*')
         .eq('id', prevId)
         .single();
-
       if (error || !data) {
-        displayError("Problem Not Found", `No problem with ID: ${prevId}`);
+        displayError("Problem Not Found", `No problem found with ID: ${prevId}`);
         return;
       }
       window.history.pushState({ id: prevId }, '', newUrl);
@@ -379,7 +384,7 @@
       displayTestcases(data);
     }
 
-    // ========== ERROR HANDLING ==========
+    // Error handling
     function displayError(title, message) {
       document.getElementById('problem-title').innerText = title;
       document.getElementById('problem-description').innerText = message;
@@ -568,7 +573,6 @@
       return Sk.builtinFiles["files"][x];
     }
 
-    // Initialize Monaco Editor
     function initializeEditor() {
       require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor/min/vs' } });
       require(['vs/editor/editor.main'], function () {
@@ -623,7 +627,6 @@
       }
     }
 
-    // Test DB
     async function runDbTest() {
       const outputEl = document.getElementById('output');
       outputEl.innerText = "Testing DB connection...\n";
@@ -642,11 +645,10 @@
       }
     }
 
-    // Create sample data
     async function createSampleData() {
       const outputEl = document.getElementById('output');
       outputEl.innerText = "Creating sample data...\n";
-      // Implement your logic
+      // Implement your logic to insert sample data if needed.
       outputEl.innerText += "Done (or error if any).";
     }
   </script>
