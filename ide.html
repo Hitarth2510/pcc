@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RetroCode Arena</title>
   <script src="https://unpkg.com/monaco-editor/min/vs/loader.js"></script>
-  <!-- Remove Skulpt scripts since we now use Judge0 -->
+  <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <!-- Supabase JS Library (using ESM module) -->
   <script type="module">
@@ -23,6 +24,8 @@
     // Also expose a function to list all tables in the database
     window.listAllTables = async () => {
       try {
+        // This RPC call requires a custom function to be set up in Supabase
+        // Try to get schema info using public schema
         const { data, error } = await window.supabaseClient.rpc('get_tables');
         if (error) throw error;
         return data;
@@ -137,7 +140,6 @@
       <h2>Code Editor</h2>
       <div id="code-editor"></div>
       <div class="buttons">
-        <!-- runCode() now uses Judge0 API via jQuery -->
         <button onclick="runCode()">Run</button>
         <button onclick="clearOutput()">Clear Output</button>
         <button onclick="zoomIn()">Zoom In (+)</button>
@@ -157,8 +159,11 @@
     // Initialize the application
     async function initializeApp() {
       console.log("Initializing app...");
+      
+      // Initialize the editor first to provide a better user experience
       initializeEditor();
-      // Delay fetching to ensure Supabase client is ready
+      
+      // Give the module script time to initialize Supabase before we try to use it
       setTimeout(fetchProblemData, 500);
     }
     
@@ -166,35 +171,48 @@
     async function fetchProblemData() {
       try {
         console.log("Fetching problem data...");
+        
         if (!window.supabaseClient) {
           console.error("Supabase client not available");
           displayError("Connection Error", "Database client not initialized. Please refresh the page.");
           return;
         }
+        
+        // Get problem ID from URL parameter or default to 1
         const urlParams = new URLSearchParams(window.location.search);
         const problemId = urlParams.get('id') || 1;
+        
         console.log(`Fetching problem with ID: ${problemId}`);
+        
+        // Directly try the main pcc_problems table first
         const { data, error } = await window.supabaseClient
           .from('pcc_problems')
           .select('*')
           .eq('id', problemId)
           .single();
+        
         console.log("Supabase response:", { data, error });
+        
         if (error) {
           console.error('Error fetching problem:', error);
+          
           if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('table')) {
             console.log("Table 'pcc_problems' may not exist, trying alternative tables...");
             await tryMultipleTables(problemId);
             return;
           }
+          
           handleDatabaseError(error, problemId);
           return;
         }
+        
         if (!data) {
           console.error('No data returned for problem ID:', problemId);
           displayError('Problem Not Found', `Could not find problem with ID ${problemId}. Please check if this problem exists.`);
           return;
         }
+        
+        // Successfully retrieved data - populate UI
         populateProblemData(data);
       } catch (err) {
         console.error('Error in fetchProblemData:', err);
@@ -204,6 +222,7 @@
     
     // Try multiple table names that might exist in the database
     async function tryMultipleTables(problemId) {
+      // Include 'pcc_problems' as the first element to prioritize it
       const possibleTables = [
         'pcc_problems', 'problems', 'problem', 'challenges', 'challenge', 'coding_problems', 
         'questions', 'tasks', 'assignments', 'exercises', 'puzzles',
@@ -211,14 +230,17 @@
         'Problems', 'Problem', 'Challenges', 'Challenge',
         'public.problems', 'public.challenges', 'code.problems'
       ];
+      
       let foundData = false;
       const outputElement = document.getElementById('output');
       outputElement.innerText = "Checking database tables...\n";
+      
       try {
         const { data: tablesData, error: tablesError } = await window.supabaseClient
           .from('information_schema.tables')
           .select('table_name')
           .eq('table_schema', 'public');
+          
         if (!tablesError && tablesData && tablesData.length > 0) {
           outputElement.innerText += `Found ${tablesData.length} tables in database:\n`;
           tablesData.forEach(t => {
@@ -234,23 +256,28 @@
         console.log("Error querying schema:", err);
         outputElement.innerText += "Note: Could not query database schema.\n";
       }
+      
       for (const table of possibleTables) {
         console.log(`Trying table: ${table}`);
         outputElement.innerText += `Checking table: ${table}...\n`;
+        
         try {
           const { data, error } = await window.supabaseClient
             .from(table)
             .select('*')
             .limit(5);
+            
           if (!error && data && data.length > 0) {
             console.log(`Found data in table "${table}":`, data);
             outputElement.innerText += `✓ Found ${data.length} rows in table "${table}"\n`;
+            
             try {
               const { data: idData, error: idError } = await window.supabaseClient
                 .from(table)
                 .select('*')
                 .eq('id', problemId)
                 .single();
+                
               if (!idError && idData) {
                 console.log(`Found problem by id in "${table}":`, idData);
                 populateProblemData(idData);
@@ -260,12 +287,14 @@
             } catch (idErr) {
               console.log(`Error querying by ID in "${table}":`, idErr);
             }
+            
             try {
               const { data: pidData, error: pidError } = await window.supabaseClient
                 .from(table)
                 .select('*')
                 .eq('problem_id', problemId)
                 .single();
+                
               if (!pidError && pidData) {
                 console.log(`Found problem by problem_id in "${table}":`, pidData);
                 populateProblemData(pidData);
@@ -275,6 +304,7 @@
             } catch (pidErr) {
               console.log(`Error querying by problem_id in "${table}":`, pidErr);
             }
+            
             if (!foundData && data && data.length > 0) {
               console.log(`Using first record from "${table}" as fallback:`, data[0]);
               outputElement.innerText += "Note: Using first available problem as fallback.\n";
@@ -287,14 +317,17 @@
           console.log(`Error querying table "${table}":`, err);
         }
       }
+      
       if (!foundData) {
         displayError('Data Access Error', 'Could not find any problem data in the database. Please verify the database structure and permissions.');
         outputElement.innerText = "No problem data found in any database table.\n\n";
         outputElement.innerText += "Would you like to create sample problem data?\n";
+        
         const createBtn = document.createElement('button');
         createBtn.innerText = "Create Sample Data";
         createBtn.onclick = createSampleData;
         createBtn.style = "background-color: #33aaff; margin-top: 10px; margin-right: 10px;";
+        
         outputElement.appendChild(document.createElement('br'));
         outputElement.appendChild(createBtn);
       }
@@ -303,6 +336,7 @@
     // Handle specific database errors
     function handleDatabaseError(error, problemId) {
       console.error('Database error details:', error);
+      
       if (error.code === 'PGRST116') {
         displayError('Problem Not Found', `Problem ID ${problemId} does not exist in the database.`);
       } else if (error.code === '42P01') {
@@ -333,10 +367,12 @@
       const inputFormat = data.input_format || data.input || data.input_description || data.problem_input || data.sample_input || data.test_input || 'No input format specified.';
       const expectedOutput = data.expected_output || data.output || data.output_format || data.sample_output || data.problem_output || data.test_output || 'No expected output specified.';
       const initialCode = data.initial_code || data.starter_code || data.template || data.code || data.sample_code || data.boilerplate || data.starter_template || '# Write your solution here\n';
+      
       document.getElementById('problem-title').innerText = title;
       document.getElementById('problem-description').innerText = description;
       document.getElementById('problem-input').innerText = inputFormat;
       document.getElementById('problem-output').innerText = expectedOutput;
+      
       if (window.editor) {
         window.editor.setValue(initialCode);
       } else {
@@ -372,6 +408,7 @@
             'editor.lineNumbers.foreground': '#888888'
           }
         });
+
         window.editor = monaco.editor.create(document.getElementById('code-editor'), {
           value: "# Loading code...",
           language: 'python',
@@ -401,82 +438,25 @@
         window.editor.updateOptions({ fontSize: fontSize });
       }
     }
+
+    function builtinRead(x) {
+      if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined)
+        throw "File not found: '" + x + "'";
+      return Sk.builtinFiles["files"][x];
+    }
     
-    /* -------------------------------
-       NEW: runCode() using Judge0 API 
-       -------------------------------
-       This function sends the code to Judge0 via jQuery AJAX,
-       polls for the result, and displays the output.
-    */
     function runCode() {
-      const code = window.editor.getValue();
-      const outputElement = document.getElementById('output');
-      outputElement.innerText = "Submitting code to Judge0 API...";
-      
-      // Judge0 endpoint configuration
-      const submissionSettings = {
-        async: true,
-        crossDomain: true,
-        url: 'https://judge0-extra-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=false',
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-rapidapi-key': '4841e8bf25msh34f2515be0749bcp18ecd9jsn5988aa0db851',
-          'x-rapidapi-host': 'judge0-extra-ce.p.rapidapi.com'
-        },
-        processData: false,
-        data: JSON.stringify({
-          source_code: code,
-          language_id: 71 // language id for Python 3; adjust if needed
-        })
-      };
-      
-      // Submit the code
-      $.ajax(submissionSettings).done(function (submissionResponse) {
-        console.log("Submission response:", submissionResponse);
-        // Get the token from the response and start polling for result
-        const token = submissionResponse.token;
-        pollSubmission(token);
-      }).fail(function(jqXHR, textStatus, errorThrown){
-        console.error("Error submitting code:", textStatus, errorThrown);
-        outputElement.innerText = "Error submitting code to Judge0.";
-      });
+      let code = window.editor.getValue();
+      let outputElement = document.getElementById('output');
+      outputElement.innerText = "Running...";
+      let output = "";
+      function outf(text) { output += text + "\n"; }
+      Sk.configure({ output: outf, read: builtinRead });
+      Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, code, true))
+        .then(() => outputElement.innerText = output)
+        .catch(err => outputElement.innerText = "Error: " + err.toString());
     }
     
-    // Poll Judge0 API until result is ready
-    function pollSubmission(token) {
-      const outputElement = document.getElementById('output');
-      const pollSettings = {
-        async: true,
-        crossDomain: true,
-        url: `https://judge0-extra-ce.p.rapidapi.com/submissions/${token}?base64_encoded=false`,
-        method: 'GET',
-        headers: {
-          'x-rapidapi-key': '4841e8bf25msh34f2515be0749bcp18ecd9jsn5988aa0db851',
-          'x-rapidapi-host': 'judge0-extra-ce.p.rapidapi.com'
-        }
-      };
-      
-      $.ajax(pollSettings).done(function (resultResponse) {
-        console.log("Result response:", resultResponse);
-        // Judge0 returns a status with id and description
-        if (resultResponse.status && resultResponse.status.id <= 2) {
-          // If status id is 1 (In Queue) or 2 (Processing), poll again after a delay
-          outputElement.innerText = "Processing... Please wait.";
-          setTimeout(function() {
-            pollSubmission(token);
-          }, 2000);
-        } else {
-          // When status is final, display the output (or error if any)
-          outputElement.innerText = resultResponse.stdout || resultResponse.stderr || resultResponse.compile_output || "No output.";
-        }
-      }).fail(function(jqXHR, textStatus, errorThrown){
-        console.error("Error polling submission:", textStatus, errorThrown);
-        outputElement.innerText = "Error retrieving results from Judge0.";
-      });
-    }
-    
-    // Clear the output display
     function clearOutput() {
       document.getElementById('output').innerText = "No output yet...";
     }
@@ -485,6 +465,8 @@
     async function createSampleDataInTable(tableName) {
       const outputElement = document.getElementById('output');
       outputElement.innerText = `Creating sample data in table '${tableName}'...\n`;
+      
+      // Sample problem data
       const sampleProblems = [
         {
           title: "Sum of Two Numbers",
@@ -510,6 +492,7 @@
       ];
       
       try {
+        // Insert the sample problems into the specified table
         const { data, error } = await window.supabaseClient
           .from(tableName)
           .insert(sampleProblems)
@@ -517,6 +500,7 @@
           
         if (error) {
           outputElement.innerText += `❌ Error creating problems: ${error.message}\n`;
+          
           if (error.code === '42P01') {
             outputElement.innerText += "\nTable does not exist. Attempting to create it first...\n";
             outputElement.innerText += "To create the table in Supabase, use the SQL editor in the Supabase dashboard with this query:\n\n";
@@ -541,6 +525,7 @@ CREATE TABLE ${tableName} (
         outputElement.innerText += `✅ Successfully created ${data.length} sample problems in table '${tableName}'!\n`;
         outputElement.innerText += "Refresh the page to see the problems.\n";
         outputElement.innerText += "\nSample problem created:\n" + JSON.stringify(data[0], null, 2);
+        
       } catch (err) {
         outputElement.innerText += `❌ Error inserting data: ${err.message}\n`;
       }
@@ -556,7 +541,10 @@ CREATE TABLE ${tableName} (
           outputElement.innerText += "❌ Error: Supabase client not available. Please refresh the page.\n";
           return;
         }
+        
         outputElement.innerText += "✓ Using existing Supabase client\n";
+        
+        // First check if pcc_problems table already exists with data
         try {
           const { data, error } = await window.supabaseClient
             .from('pcc_problems')
@@ -565,6 +553,7 @@ CREATE TABLE ${tableName} (
             
           if (!error && data) {
             outputElement.innerText += "Table 'pcc_problems' already exists.\n";
+            
             const { count, error: countError } = await window.supabaseClient
               .from('pcc_problems')
               .select('*', { count: 'exact', head: true });
@@ -589,7 +578,10 @@ CREATE TABLE ${tableName} (
         } catch (err) {
           outputElement.innerText += `Table 'pcc_problems' does not exist or is not accessible.\n`;
         }
+        
+        // Use pcc_problems for sample data creation
         await createSampleDataInTable('pcc_problems');
+        
       } catch (err) {
         outputElement.innerText += `❌ Error creating sample data: ${err.message}\n`;
       }
