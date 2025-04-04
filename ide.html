@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RetroCode Arena</title>
   <script src="https://unpkg.com/monaco-editor/min/vs/loader.js"></script>
-  <!-- Remove Skulpt scripts since we now use Judge0 -->
+  <!-- Removed Skulpt scripts since we're now using Judge0 -->
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <!-- Supabase JS Library (using ESM module) -->
   <script type="module">
@@ -343,7 +343,7 @@
         console.warn('Editor not ready yet, will not set initial code');
       }
     }
-
+    
     // Initialize Monaco Editor
     function initializeEditor() {
       require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor/min/vs' } });
@@ -384,17 +384,15 @@
         });
       });
     }
-
+    
     // Font size control
     let fontSize = 20;
-    
     function zoomIn() {
       if (fontSize < 35) {
         fontSize += 2;
         window.editor.updateOptions({ fontSize: fontSize });
       }
     }
-
     function zoomOut() {
       if (fontSize > 10) {
         fontSize -= 2;
@@ -412,8 +410,7 @@
       const code = window.editor.getValue();
       const outputElement = document.getElementById('output');
       outputElement.innerText = "Submitting code to Judge0 API...";
-      
-      // Judge0 endpoint configuration
+      // Judge0 endpoint configuration (using wait=false for asynchronous submission)
       const submissionSettings = {
         async: true,
         crossDomain: true,
@@ -427,20 +424,25 @@
         processData: false,
         data: JSON.stringify({
           source_code: code,
-          language_id: 71 // language id for Python 3; adjust if needed
+          language_id: 71
         })
       };
       
-      // Submit the code
-      $.ajax(submissionSettings).done(function (submissionResponse) {
-        console.log("Submission response:", submissionResponse);
-        // Get the token from the response and start polling for result
-        const token = submissionResponse.token;
-        pollSubmission(token);
-      }).fail(function(jqXHR, textStatus, errorThrown){
-        console.error("Error submitting code:", textStatus, errorThrown);
-        outputElement.innerText = "Error submitting code to Judge0.";
-      });
+      $.ajax(submissionSettings)
+        .done(function (submissionResponse) {
+          console.log("Submission response:", submissionResponse);
+          if (!submissionResponse || !submissionResponse.token) {
+            outputElement.innerText = "Error: No token returned from Judge0.";
+            return;
+          }
+          const token = submissionResponse.token;
+          // Start polling for the result with a delay of 3000ms
+          pollSubmission(token);
+        })
+        .fail(function(jqXHR, textStatus, errorThrown){
+          console.error("Error submitting code:", textStatus, errorThrown);
+          outputElement.innerText = "Error submitting code to Judge0.";
+        });
     }
     
     // Poll Judge0 API until result is ready
@@ -456,31 +458,30 @@
           'x-rapidapi-host': 'judge0-extra-ce.p.rapidapi.com'
         }
       };
-      
-      $.ajax(pollSettings).done(function (resultResponse) {
-        console.log("Result response:", resultResponse);
-        // Judge0 returns a status with id and description
-        if (resultResponse.status && resultResponse.status.id <= 2) {
-          // If status id is 1 (In Queue) or 2 (Processing), poll again after a delay
-          outputElement.innerText = "Processing... Please wait.";
-          setTimeout(function() {
-            pollSubmission(token);
-          }, 2000);
-        } else {
-          // When status is final, display the output (or error if any)
-          outputElement.innerText = resultResponse.stdout || resultResponse.stderr || resultResponse.compile_output || "No output.";
-        }
-      }).fail(function(jqXHR, textStatus, errorThrown){
-        console.error("Error polling submission:", textStatus, errorThrown);
-        outputElement.innerText = "Error retrieving results from Judge0.";
-      });
+      $.ajax(pollSettings)
+        .done(function (resultResponse) {
+          console.log("Poll result response:", resultResponse);
+          if (resultResponse.status && resultResponse.status.id <= 2) {
+            outputElement.innerText = "Processing... Please wait.";
+            setTimeout(function() {
+              pollSubmission(token);
+            }, 3000);
+          } else {
+            const finalOutput = resultResponse.stdout || resultResponse.stderr || resultResponse.compile_output || "No output.";
+            outputElement.innerText = finalOutput;
+          }
+        })
+        .fail(function(jqXHR, textStatus, errorThrown){
+          console.error("Error polling submission:", textStatus, errorThrown);
+          outputElement.innerText = "Error retrieving results from Judge0.";
+        });
     }
     
     // Clear the output display
     function clearOutput() {
       document.getElementById('output').innerText = "No output yet...";
     }
-
+    
     // Create sample data in a specific table
     async function createSampleDataInTable(tableName) {
       const outputElement = document.getElementById('output');
@@ -514,7 +515,6 @@
           .from(tableName)
           .insert(sampleProblems)
           .select();
-          
         if (error) {
           outputElement.innerText += `❌ Error creating problems: ${error.message}\n`;
           if (error.code === '42P01') {
@@ -537,7 +537,6 @@ CREATE TABLE ${tableName} (
           }
           return;
         }
-        
         outputElement.innerText += `✅ Successfully created ${data.length} sample problems in table '${tableName}'!\n`;
         outputElement.innerText += "Refresh the page to see the problems.\n";
         outputElement.innerText += "\nSample problem created:\n" + JSON.stringify(data[0], null, 2);
@@ -545,12 +544,11 @@ CREATE TABLE ${tableName} (
         outputElement.innerText += `❌ Error inserting data: ${err.message}\n`;
       }
     }
-
+    
     // Create sample problem data in the database (entry point function)
     async function createSampleData() {
       const outputElement = document.getElementById('output');
       outputElement.innerText = "Attempting to create sample problem data...\n";
-      
       try {
         if (!window.supabaseClient) {
           outputElement.innerText += "❌ Error: Supabase client not available. Please refresh the page.\n";
@@ -562,13 +560,11 @@ CREATE TABLE ${tableName} (
             .from('pcc_problems')
             .select('count')
             .limit(1);
-            
           if (!error && data) {
             outputElement.innerText += "Table 'pcc_problems' already exists.\n";
             const { count, error: countError } = await window.supabaseClient
               .from('pcc_problems')
               .select('*', { count: 'exact', head: true });
-              
             if (!countError && count > 0) {
               outputElement.innerText += `Table already contains ${count} problems.\n`;
               outputElement.innerText += "Do you want to proceed and add more sample problems? This will not affect existing data.\n";
